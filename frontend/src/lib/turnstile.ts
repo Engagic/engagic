@@ -98,6 +98,21 @@ function waitForToken(): Promise<string> {
 }
 
 async function exchangeForSession(turnstileToken: string): Promise<string | null> {
+	// Set the SSR gate cookie via /challenge (same-origin, auto-applies Set-Cookie)
+	// so that future navigations to content pages pass the hooks.server.ts gate
+	// without an interstitial redirect.
+	try {
+		await fetch('/challenge', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ token: turnstileToken }),
+			credentials: 'same-origin',
+		});
+	} catch {
+		// Non-fatal; the gate will still challenge on next navigation.
+	}
+
+	// Exchange token for API session (separate from SSR cookie).
 	try {
 		const resp = await fetch(VERIFY_URL, {
 			method: 'POST',

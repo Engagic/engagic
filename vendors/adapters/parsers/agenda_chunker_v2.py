@@ -84,7 +84,12 @@ def _extract_item_number_permissive(title: str) -> Tuple[str, str]:
 # Detection
 # ---------------------------------------------------------------------------
 
-_MAX_AGENDA_PAGES = 10
+_MAX_AGENDA_PAGES = 15
+# Threshold above which a doc is treated as a "packet" (agenda + staff reports).
+# Kept at 10 independent of the scan cap so auto-detection still prefers the
+# URL path for 11-15 page agendas with bookmarks -- bumping the cap alone
+# would flip those into the TOC path and lose items.
+_LARGE_PACKET_THRESHOLD = 10
 
 
 def _has_agenda_links(doc) -> bool:
@@ -144,12 +149,12 @@ def _detect_parse_path(doc) -> str:
     internal_link_count = _count_internal_page_links(doc)
     has_pagerefs = internal_link_count >= 3
 
-    if has_links and doc.page_count > _MAX_AGENDA_PAGES:
+    if has_links and doc.page_count > _LARGE_PACKET_THRESHOLD:
         # Large packet with URL links on the agenda pages — try URL first,
         # fall back to TOC if it produces nothing.
         return "url_then_toc" if has_toc else "url"
 
-    if has_pagerefs and doc.page_count > _MAX_AGENDA_PAGES:
+    if has_pagerefs and doc.page_count > _LARGE_PACKET_THRESHOLD:
         # Large packet with internal page references — these define item
         # boundaries more accurately than attachment-level TOC bookmarks.
         return "pageref"

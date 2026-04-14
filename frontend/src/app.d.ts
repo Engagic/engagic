@@ -13,6 +13,7 @@ declare global {
 			env?: {
 				TILES: R2Bucket;
 				SSR_AUTH_SECRET?: string;
+				CHALLENGE_COOKIE_SECRET?: string;
 			};
 		}
 	}
