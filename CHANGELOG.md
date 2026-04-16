@@ -158,8 +158,8 @@ instead of silently storing zero items.
 ### Page-Text Size Cap
 
 `parsing/pdf.py:629-640` — added a 200,000-char per-page cap on
-`page.get_text()` output. A San Bruno meeting PDF with a corrupted font
-CMap returned ~1.9 MB of garbage text per page, totalling 130 MB across 67
+`page.get_text()` output. A meeting PDF with a corrupted font CMap
+returned ~1.9 MB of garbage text per page, totalling 130 MB across 67
 pages. The multiprocessing result-queue pickle hit `MemoryError` when
 trying to serialize the extraction result back to the parent process,
 killing the whole meeting's extraction even though most pages were fine.
