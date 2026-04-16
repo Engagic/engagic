@@ -36,6 +36,22 @@ from vendors.adapters.parsers.granicus_parser import (
 from pipeline.protocols import MetricsCollector
 
 
+def _ensure_attachment_portal_urls(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Set attachments[].portal_url = url when missing.
+
+    Granicus PDF link annotations are author-provided URIs (legistar-download
+    wrappers, cloudfront staff reports, unsigned S3). PyMuPDF extracts the raw
+    annotation URI verbatim — no redirect following — so these are already
+    durable. Mirror to portal_url for UI consistency with the CivicClerk schema.
+    """
+    for item in items:
+        for att in item.get("attachments") or []:
+            url = att.get("url")
+            if url and not att.get("portal_url"):
+                att["portal_url"] = url
+    return items
+
+
 def _translate_downloadfile_to_viewdocument(url: str) -> str:
     """Translate AgendaOnline DownloadFile URL to ViewDocument URL.
 
@@ -266,7 +282,9 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             final_url = str(response.url)
             content_type = response.headers.get("Content-Type", "")
 
-            # DocumentViewer.php redirects serve raw PDF — run chunker directly
+            # DocumentViewer.php redirects serve raw PDF — run chunker directly.
+            # Force v1 ("url" path): for Granicus URL-anchored agendas, v1 groups
+            # items by boldness/formatting cues correctly where v2 misaligns.
             if "application/pdf" in content_type:
                 logger.info(
                     "pdf redirect detected",
@@ -275,17 +293,47 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     event_id=event_id,
                     final_url=final_url[:120],
                 )
-                pdf_items = await self._parse_pdf_response(response, event_id)
+                pdf_items = await self._parse_pdf_response(response, event_id, force_method="url")
+                resolved_packet_url = final_url
+                # Thin-agenda fallback: if the agenda PDF produced nothing
+                # useful -- either zero items or items with no attachments
+                # (motion-boilerplate body_text doesn't count; Winder GA's
+                # "Consideration of a Motion to accept..." items have 400-char
+                # bodies but no linked documents, while the corresponding
+                # packet has 24 TOC entries with real staff reports) -- try
+                # the meatier "Agenda Packet" URL captured from ViewPublisher.
+                # Force TOC (v2_toc) since Granicus packets are bookmark-anchored.
+                agenda_has_attachments = bool(pdf_items) and any(
+                    item.get("attachments") for item in pdf_items
+                )
+                if not agenda_has_attachments:
+                    listing_packet = meeting_data.get("packet_url")
+                    if listing_packet and listing_packet != final_url:
+                        logger.info(
+                            "agenda pdf hollow, falling back to listing packet",
+                            vendor="granicus",
+                            slug=self.slug,
+                            event_id=event_id,
+                            agenda_item_count=len(pdf_items) if pdf_items else 0,
+                            packet_url=listing_packet[:120],
+                        )
+                        packet_items = await self._parse_packet_pdf(
+                            listing_packet, event_id, force_method="toc"
+                        )
+                        if packet_items:
+                            pdf_items = packet_items
+                            resolved_packet_url = listing_packet
+                if pdf_items:
+                    pdf_items = _ensure_attachment_portal_urls(pdf_items)
                 meeting = {
                     "vendor_id": event_id,
                     "title": meeting_data.get("title", ""),
                     "start": meeting_data.get("start", ""),
+                    "agenda_url": agenda_viewer_url,  # durable portal URL
+                    "packet_url": resolved_packet_url,
                 }
                 if pdf_items:
                     meeting["items"] = pdf_items
-                    meeting["packet_url"] = final_url
-                else:
-                    meeting["packet_url"] = final_url
                 return meeting
 
             # Google Docs viewer wraps PDF in HTML — extract real URL and download
@@ -298,15 +346,45 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                         slug=self.slug,
                         event_id=event_id,
                     )
-                    pdf_items = await self._parse_packet_pdf(real_pdf_url, event_id)
+                    pdf_items = await self._parse_packet_pdf(real_pdf_url, event_id, force_method="url")
+                    resolved_packet_url = real_pdf_url
+                    # Same thin-agenda fallback as the direct-PDF branch:
+                    # NPR's gview-wrapped agenda PDFs are 2-page thin front
+                    # matter. The real meaty packet is a separate cloudfront
+                    # URL captured from ViewPublisher and has a clean TOC
+                    # labelled "Item 6.a - Cover Page" etc. that v2_toc
+                    # handles cleanly.
+                    agenda_has_attachments = bool(pdf_items) and any(
+                        item.get("attachments") for item in pdf_items
+                    )
+                    if not agenda_has_attachments:
+                        listing_packet = meeting_data.get("packet_url")
+                        if listing_packet and listing_packet != real_pdf_url:
+                            logger.info(
+                                "gview agenda hollow, falling back to listing packet",
+                                vendor="granicus",
+                                slug=self.slug,
+                                event_id=event_id,
+                                agenda_item_count=len(pdf_items) if pdf_items else 0,
+                                packet_url=listing_packet[:120],
+                            )
+                            packet_items = await self._parse_packet_pdf(
+                                listing_packet, event_id, force_method="toc"
+                            )
+                            if packet_items:
+                                pdf_items = packet_items
+                                resolved_packet_url = listing_packet
+                    if pdf_items:
+                        pdf_items = _ensure_attachment_portal_urls(pdf_items)
                     meeting = {
                         "vendor_id": event_id,
                         "title": meeting_data.get("title", ""),
                         "start": meeting_data.get("start", ""),
+                        "agenda_url": agenda_viewer_url,  # durable portal URL
+                        "packet_url": resolved_packet_url,
                     }
                     if pdf_items:
                         meeting["items"] = pdf_items
-                    meeting["packet_url"] = real_pdf_url
                     return meeting
 
             html = await self._read_text(response)
@@ -361,13 +439,14 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 "vendor_id": event_id,
                 "title": meeting_data.get("title", ""),
                 "start": meeting_data.get("start", ""),
+                # AgendaViewer.php is the durable portal URL regardless of
+                # whether the HTML parse, PDF fallback, or packet URL wins.
+                "agenda_url": agenda_viewer_url,
             }
 
             if items:
+                items = _ensure_attachment_portal_urls(items)
                 meeting["items"] = items
-                # Store the durable AgendaViewer.php URL, not the S3/CloudFront
-                # redirect destination which can expire
-                meeting["agenda_url"] = agenda_viewer_url
                 attachment_count = sum(len(item.get("attachments", [])) for item in items)
                 logger.debug(
                     "parsed meeting with items",
@@ -392,9 +471,10 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 pdf_items = None
                 used_url = None
 
-                # Try agenda PDF first (may have hyperlinked attachment URLs)
+                # Agenda PDFs are URL-anchored (hyperlinks). v1 groups boldness-
+                # and formatting-marked items correctly here; v2 misaligns.
                 if agenda_pdf_url:
-                    pdf_items = await self._parse_packet_pdf(agenda_pdf_url, event_id)
+                    pdf_items = await self._parse_packet_pdf(agenda_pdf_url, event_id, force_method="url")
                     items_have_content = pdf_items and any(
                         item.get("body_text") or item.get("attachments")
                         for item in pdf_items
@@ -411,7 +491,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                         )
                         pdf_items = None  # Reset — try packet next
 
-                # Try packet PDF if agenda didn't work (TOC-based with body_text)
+                # Packet PDFs are TOC-based; keep auto dispatch (v2-first).
                 if not pdf_items and packet_url and packet_url != agenda_pdf_url:
                     pdf_items = await self._parse_packet_pdf(packet_url, event_id)
                     items_have_content = pdf_items and any(
@@ -424,6 +504,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                         pdf_items = None
 
                 if pdf_items and used_url:
+                    pdf_items = _ensure_attachment_portal_urls(pdf_items)
                     meeting["items"] = pdf_items
                     meeting["packet_url"] = used_url
                     parse_method = pdf_items[0].get("metadata", {}).get("parse_method", "")
@@ -689,12 +770,15 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         return " ".join(parts) if parts else ""
 
     async def _parse_pdf_response(
-        self, response, event_id: Optional[str] = None
+        self,
+        response,
+        event_id: Optional[str] = None,
+        force_method: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Parse a PDF from an already-fetched response (e.g. DocumentViewer redirect)."""
         try:
             pdf_bytes = await response.read()
-            return await self._parse_pdf_bytes(pdf_bytes, vendor_id=event_id)
+            return await self._parse_pdf_bytes(pdf_bytes, vendor_id=event_id, force_method=force_method)
         except Exception as e:
             logger.warning(
                 "pdf redirect parse failed",

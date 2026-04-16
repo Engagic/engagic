@@ -275,6 +275,7 @@ class Processor:
             queue_id = job.id
             job_type = job.job_type
             job_start = time.time()
+            job_timeout = config.JOB_TIMEOUT_SECONDS
 
             try:
                 if job_type == "meeting":
@@ -288,7 +289,14 @@ class Processor:
                         self.metrics.queue_jobs_processed.labels(job_type="meeting", status="failed").inc()
                         return
                     with self.metrics.processing_duration.labels(job_type="meeting").time():
-                        item_stats = await self.process_meeting(meeting)
+                        # Wall-clock ceiling: if process_meeting hangs (LLM stall,
+                        # aiohttp cleanup deadlock, orphaned threads holding the
+                        # loop), we cancel and mark the row failed instead of
+                        # pinning a worker forever. Caught below as TimeoutError.
+                        item_stats = await asyncio.wait_for(
+                            self.process_meeting(meeting),
+                            timeout=job_timeout,
+                        )
                     await self.db.queue.mark_processing_complete(queue_id)
                     stats["processed"] += 1
                     if item_stats:
@@ -304,7 +312,10 @@ class Processor:
                     if not isinstance(job.payload, MatterJob):
                         raise ValueError("Invalid payload type for matter job")
                     with self.metrics.processing_duration.labels(job_type="matter").time():
-                        matter_stats = await self.process_matter(job.payload.matter_id, job.payload.meeting_id, {"item_ids": job.payload.item_ids})
+                        matter_stats = await asyncio.wait_for(
+                            self.process_matter(job.payload.matter_id, job.payload.meeting_id, {"item_ids": job.payload.item_ids}),
+                            timeout=job_timeout,
+                        )
                     await self.db.queue.mark_processing_complete(queue_id)
                     stats["processed"] += 1
                     stats["items_processed"] += matter_stats.get("items_processed", 0)
@@ -316,6 +327,20 @@ class Processor:
 
                 else:
                     raise ValueError(f"Unknown job type: {job_type}")
+
+            except asyncio.TimeoutError:
+                error_msg = f"Job exceeded {job_timeout}s wall-clock timeout"
+                await self.db.queue.mark_processing_failed(queue_id, error_msg)
+                stats["failed"] += 1
+                self.metrics.queue_jobs_processed.labels(job_type=job_type, status="failed").inc()
+                logger.error(
+                    "job timed out",
+                    queue_id=queue_id,
+                    job_type=job_type,
+                    meeting_id=getattr(job.payload, "meeting_id", None),
+                    timeout_seconds=job_timeout,
+                    duration_seconds=round(time.time() - job_start, 1),
+                )
 
             except (ProcessingError, LLMError, ExtractionError) as e:
                 await self.db.queue.mark_processing_failed(queue_id, str(e))

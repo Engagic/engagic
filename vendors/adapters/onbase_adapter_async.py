@@ -438,23 +438,32 @@ class AsyncOnBaseAdapter(AsyncBaseAdapter):
 
             name = link.get_text(strip=True)
 
-            # DownloadFile returns a JS redirect page; DownloadFileBytes serves the actual file.
-            # DownloadFileBytes works without session cookies when all params are correct.
-            href = href.replace("/DownloadFile/", "/DownloadFileBytes/")
+            # The href OnBase gives us is /Documents/DownloadFile/NAME.pdf?... which
+            # returns a JS shim page, not the PDF. Its JS fires a POST to
+            # InvokeDownloadAttachment (stashes server-side state) then redirects to
+            # /Documents/ViewDocument/NAME.pdf?... — that's the endpoint that
+            # actually streams PDF bytes. ViewDocument accepts the same query params
+            # and works without session cookies or the Invoke POST, so we skip the
+            # shim entirely. /DownloadFileBytes/ works on some older OnBase
+            # deployments but 404s on newer ones (Whittier, Concord, Hamilton Co).
+            portal_href = href
+            download_href = href.replace("/DownloadFile/", "/ViewDocument/")
 
-            if href.startswith("/"):
-                full_url = f"{domain}{href}"
-            else:
-                full_url = href
+            def _absolute(h: str) -> str:
+                return f"{domain}{h}" if h.startswith("/") else h
+
+            full_url = _absolute(download_href)
+            portal_url = _absolute(portal_href)
 
             if not name:
-                match = re.search(r'/DownloadFile/([^?]+)', href)
+                match = re.search(r'/(?:DownloadFile|ViewDocument)/([^?]+)', href)
                 if match:
                     name = unquote(match.group(1))
 
             attachments.append({
                 "name": name or "Attachment",
                 "url": full_url,
+                "portal_url": portal_url,
                 "type": "pdf",  # OnBase appends .pdf to all DownloadFile URLs
             })
 

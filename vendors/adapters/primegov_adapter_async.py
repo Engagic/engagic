@@ -228,6 +228,20 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         agenda_docs = self._find_agenda_docs(meeting.get("documentList", []))
 
         if not agenda_docs:
+            # No HTML agenda template — but a compiled PDF packet may still
+            # exist (e.g. Morristown NJ: templates named "Agenda"/"Minutes"/
+            # "Packet", all PDF). Try the packet chunker before giving up so
+            # these cities don't sync zero items forever.
+            packet_doc = self._find_packet_doc(meeting.get("documentList", []))
+            if packet_doc:
+                packet_url = self._build_packet_url(packet_doc)
+                chunked = await self._chunk_agenda_then_packet(
+                    packet_url=packet_url,
+                    vendor_id=str(meeting["id"]),
+                )
+                if chunked:
+                    result["items"] = chunked
+                    result["packet_url"] = packet_url
             if meeting_status:
                 result["meeting_status"] = meeting_status
             return result

@@ -626,6 +626,14 @@ class PdfExtractor:
         if use_formatting:
             logger.info("[PyMuPDF] Legislative formatting detected - tagging additions/deletions")
 
+        # Per-page sanity cap. A single PDF page should never yield more than
+        # a few KB of real text. When PyMuPDF sees a broken font CMap or a
+        # mis-tagged content stream, get_text() can return megabytes of
+        # gibberish for one page and the total exceeds the 1GB RLIMIT_AS
+        # child budget or blows up multiprocessing pickle. Truncate early so
+        # the rest of the document still extracts.
+        _MAX_PAGE_CHARS = 200_000
+
         # Pass 1: Extract text from all pages, collect OCR tasks
         for page_num in range(len(doc)):
             page = doc[page_num]
@@ -635,6 +643,15 @@ class PdfExtractor:
                 page_text = _extract_text_with_formatting(page, page_num + 1)
             else:
                 page_text = page.get_text(sort=True)  # type: ignore[attr-defined]
+
+            if len(page_text) > _MAX_PAGE_CHARS:
+                logger.warning(
+                    "[PyMuPDF] Page yielded suspicious text volume, truncating",
+                    page_num=page_num + 1,
+                    chars=len(page_text),
+                    limit=_MAX_PAGE_CHARS,
+                )
+                page_text = page_text[:_MAX_PAGE_CHARS]
 
             initial_char_count = len(page_text.strip())
 

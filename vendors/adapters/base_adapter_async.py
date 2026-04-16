@@ -440,12 +440,18 @@ class AsyncBaseAdapter:
 
             # TOC → v2 (strictly superior). URL → v1 (or v2_url for edge cases).
             # Auto: v2 first (better TOC grouping), v1 fallback.
+            # force_method="url" prefers v1 (e.g. Ontario CA URL-anchored
+            # agendas where v2 misaligns), but falls back to v2 if v1 returns
+            # zero items — some Granicus cities (Winter Springs FL) use 3-digit
+            # item numbers that v1's `\d{1,2}\.` regex can't match.
             if force_method == "toc":
                 parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path, force_method="toc")
             elif force_method == "v2_url":
                 parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path, force_method="url")
             elif force_method == "url":
                 parsed = await asyncio.to_thread(parse_agenda_pdf, tmp_path, force_method="url")
+                if not parsed.get("items"):
+                    parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path)
             else:
                 parsed = await asyncio.to_thread(parse_agenda_pdf_v2, tmp_path)
                 if not parsed.get("items"):

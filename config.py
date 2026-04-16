@@ -93,6 +93,13 @@ class Config:
         # headroom to prevent a rerun of the crash.
         self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "3"))
 
+        # Per-job wall-clock ceiling. Exists to prevent a hung LLM call or
+        # aiohttp cleanup from pinning a queue slot indefinitely. PDF subprocess
+        # extraction already caps itself at 620s; a meeting with 2-3 timed-out
+        # PDFs plus healthy LLM summarization fits comfortably under 25 min.
+        # Exceeding this marks the queue row failed and the worker moves on.
+        self.JOB_TIMEOUT_SECONDS = int(os.getenv("ENGAGIC_JOB_TIMEOUT_SECONDS", "1500"))
+
         # Payment processing
         self.STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
         self.STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")

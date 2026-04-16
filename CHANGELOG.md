@@ -6,6 +6,222 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-04-16] Adapter Fallback Chains, Chunker Regex Fixes, Per-Job Timeout
+
+A pass over silent adapter/chunker failures observed across Granicus, OnBase, and
+PrimeGov cities: where the first parse attempt returned nothing, the pipeline
+often gave up instead of trying the obvious next thing. Also closed a job-level
+hang path that pinned a queue slot for 25+ minutes after a PDF extraction
+timeout.
+
+### Granicus Portal URL + v1 URL Chunker for AgendaViewer-to-PDF Redirects
+
+`granicus_adapter_async.py` — the `AgendaViewer.php → application/pdf` redirect
+branch (Ontario CA and all Granicus sites that serve the agenda as a direct PDF
+rather than HTML) was storing the S3 redirect target as both `agenda_url` and
+`packet_url`, discarding the durable `AgendaViewer.php?view_id=X&clip_id=Y` URL
+that's the only part of the chain that doesn't expire. Now stores the
+AgendaViewer URL as `agenda_url` and keeps the S3 URL only as `packet_url` (the
+actual bytes we parsed).
+
+The same branch was running the chunker's auto-dispatch, which picks v2 first.
+V2 misaligned items on Ontario CA's URL-anchored agendas — produced 24
+fragmented items where v1 produced 16 clean ones. Forcing `force_method="url"`
+on this branch makes v1 run first. If v1 returns zero items (Winter Springs
+FL's 3-digit item numbers were the driver here) the dispatcher falls back to v2
+auto — see `_parse_pdf_bytes` change below.
+
+Also added `_ensure_attachment_portal_urls` helper: mirrors every extracted
+attachment `url` → `portal_url`. Granicus PDF link annotations are
+author-provided durable URIs (legistar-download wrappers, cloudfront
+staff-reports, unsigned public S3), and PyMuPDF extracts them verbatim without
+redirect-following, so the url *is* the durable portal URL. Populating both
+fields matches the CivicClerk pattern and gives the frontend a consistent
+field to render.
+
+### Granicus Thin-Agenda → Listing-Packet Fallback
+
+`granicus_adapter_async.py` — the direct-PDF and Google-viewer redirect
+branches now fall back to the separately-listed packet URL from ViewPublisher
+when the agenda-PDF chunk produces no items with attachments. Trigger is
+"any item has attachments" — bare body_text doesn't count, because motion
+boilerplate like "Consideration of a Motion to accept or reject the findings
+of the ECIC..." is 400 chars of text with zero actual content links.
+
+Winder GA posts 1-4 page agendas with no TOC and no URI link annotations,
+behind a full 391-page packet PDF with a `toc_deep_hierarchical` bookmark
+tree that v2_toc slices cleanly into 24 per-item memos. New Port Richey FL
+posts thin Google-viewer-wrapped agendas whose real packet is a separate
+cloudfront URL with per-item "Item 6.a - Cover Page" TOC bookmarks that v2_toc
+handles equally well. Both were previously returning 1-item-per-meeting blobs
+or zero items. The fallback fires in both branches with the same "no
+attachments → try listing.packet_url with force_method='toc'" logic.
+
+`resolved_packet_url` is now what gets stored as `meeting.packet_url` — either
+the agenda S3 URL (if the agenda chunker succeeded) or the cloudfront packet
+URL (if the fallback fired). Downstream `url`/`portal_url` semantics unchanged.
+
+### OnBase DownloadFile → ViewDocument
+
+`onbase_adapter_async.py:441-454` — attachment URLs were being rewritten from
+`/Documents/DownloadFile/...` to `/Documents/DownloadFileBytes/...`. That
+endpoint works on older OnBase deployments (Tampa FL: 86% summarization) but
+404s on newer ones (Whittier CA, Concord CA, Hamilton County OH, Santa Barbara
+CA — all at 0% summarization before this fix). The JS inside the DownloadFile
+shim page reveals the terminal endpoint: POST `/InvokeDownloadAttachment` →
+redirect to GET `/ViewDocument/...`. ViewDocument accepts the same query
+params, streams the PDF bytes directly, and works without session cookies.
+Switched the rewrite to `/DownloadFile/ → /ViewDocument/`.
+
+Also now stores `portal_url = /DownloadFile/...` alongside `url =
+/ViewDocument/...` — the DownloadFile shim page shows a "Downloading..."
+spinner with the filename in the title, nicer UX than dropping a user
+straight onto raw PDF bytes. Matches the CivicClerk `url` vs. `portal_url`
+split pattern.
+
+### OnBase Indented Sub-Item Parsing
+
+`vendors/adapters/parsers/granicus_parser.py` `parse_agendaonline_html`
+Strategy 2 — the table-based parser was hard-coding `cells[0]` as the
+agenda-number cell. Whittier CA's item rows for sub-items (5.A, 5.B, 5.C
+under a parent "5. STAFF REPORTS") have **three cells** per row:
+`[indent, number, content]`, not two. The number sat in `cells[1]` and was
+invisible to the parser. Before this fix, Whittier returned 8 procedural
+items (CALL TO ORDER, ROLL CALL, ...) with zero sub-items — every meeting's
+real content was silently dropped.
+
+Replaced the fixed-index lookup with a cell scan: find the first cell whose
+bold span matches the agenda-number regex, use `idx+1` as the content cell.
+Also flipped `find_all('tr'/'td', recursive=False)` to avoid double-counting
+nested rows.
+
+Whittier meetings now extract 11 items (8 top-level + 3 sub-items with real
+content). Sub-items flow through the existing `ViewMeetingAgendaItem` XHR
+attachment fetch because their `loadAgendaItem(60580, false)` JS anchors
+give us the proper `vendor_item_id`.
+
+### Granicus GeneratedAgendaViewer Flat-Inline Layout
+
+`granicus_parser.py` `parse_generated_agendaviewer_html` — added Strategy 4
+at the end of the strategy chain. Placentia CA and Bullhead City AZ use a
+layout where `<strong>SECTION:</strong>` tags sit as flat siblings of
+`<br>`/`<blockquote>`/`<table>` (Placentia) or inside their own tiny
+`<div>` with tables as siblings of the div (Bullhead). Neither matched the
+existing div-wrapped or section-div strategies, so both returned zero items.
+
+The new strategy walks all `<strong>` elements document-order, skips
+procedural/long-prose headers (MISSION STATEMENT, CALL TO ORDER, etc.), and
+uses a `_find_pivot` helper to climb up to 3 levels from the strong until it
+finds an ancestor whose following siblings include a table or blockquote.
+Iterates siblings forward collecting `<table>` (item) + next-sibling
+`<blockquote>` (attachments) pairs. Rejects sub-procedure pseudo-items
+whose numbers use `)` instead of `.` (e.g. Placentia's `1) 2) 3) 4)` motion
+steps).
+
+`_extract_attachments_bounded` skips nested `<div>` subtrees that contain
+their own section-header `<strong>`, so PUBLIC HEARING's attachments don't
+absorb the REGULAR AGENDA section that's tucked inside its content
+blockquote. Wrapper divs (bare MetaViewer anchor, no nested section) are
+still walked into.
+
+Placentia now yields 3 items + 12 attachments (was 0). Bullhead 1941 yields
+8 items (was 0); 1942 yields 6 items.
+
+### V1 Chunker: 3-Digit Agenda Numbers
+
+`vendors/adapters/parsers/agenda_chunker.py:97-112` — `ITEM_NUM_RE` bumped
+from `\d{1,2}\.` to `\d{1,3}\.` (same for `\d{1,3}\.[a-z]`, `\(\d{1,3}\)`).
+Winter Springs FL uses section-prefixed 3-digit item numbers (300. for
+CONSENT AGENDA items, 400. for PUBLIC HEARINGS, 500. for REGULAR AGENDA,
+600. for REPORTS). These are standard for FL municipal agendas but didn't
+match the existing regex. Identical change to the duplicated regex at line
+1371 inside `_parse_agenda_items`.
+
+Risk of false-positive (bare 3-digit numerals matching as item headers) is
+low: the item-header detector also requires title text following the
+number, so isolated `"100."` lines don't qualify.
+
+Winter Springs went from 0 items to 8 via v1 alone (no longer needs the
+v2_url fallback for this specific case, though the fallback still triggers
+for other edge cases).
+
+### V1 URL → V2 Auto Fallback on Zero Items
+
+`vendors/adapters/base_adapter_async.py:447-455` — when `force_method="url"`
+and v1 returns zero items, the dispatcher now falls back to `parse_agenda_pdf_v2`
+auto-dispatch. Closes the regression introduced by the earlier "force v1 for
+Granicus PDF-redirect" pin: cities whose agenda patterns don't match v1's
+item-header regex (Winter Springs' 3-digit numbers pre-regex-fix, or any
+future agenda with non-standard numbering) now get v2's anchor-first pass
+instead of silently storing zero items.
+
+### Page-Text Size Cap
+
+`parsing/pdf.py:629-640` — added a 200,000-char per-page cap on
+`page.get_text()` output. A San Bruno meeting PDF with a corrupted font
+CMap returned ~1.9 MB of garbage text per page, totalling 130 MB across 67
+pages. The multiprocessing result-queue pickle hit `MemoryError` when
+trying to serialize the extraction result back to the parent process,
+killing the whole meeting's extraction even though most pages were fine.
+Normal agenda pages are 1–5 KB; 200 KB is a 40× headroom cap with zero
+legitimate false positives in the corpus.
+
+Truncated pages log a `[PyMuPDF] Page yielded suspicious text volume`
+warning so the failure mode is visible, but the rest of the document still
+processes. Downstream summarization gets partial content instead of total
+loss.
+
+### PrimeGov Packet Fallback When No HTML Agenda
+
+`primegov_adapter_async.py:230-248` — if
+`_find_agenda_docs(documentList)` returns empty (no template named "HTML
+Packet" or matching the `"htm"` content-based heuristic), the adapter now
+looks for a compiled-PDF packet via `_find_packet_doc` and runs
+`_chunk_agenda_then_packet` on it before returning.
+
+Morristown NJ is the driver: its templates are literally named `Agenda` /
+`Minutes` / `Packet`, all `compileOutputType: 1` (PDF). Zero templates match
+the HTML heuristic, so every meeting was short-circuiting at line 233 with
+empty items — 0 items across all meetings, silently, indefinitely. The
+same gap likely affects any other PrimeGov city whose template names
+don't include `htm` anywhere (there are several). After fix: Morristown's
+recent City Council meeting chunks to 31 items via v2_toc on the compiled
+packet.
+
+Preserves existing behavior for cities with real HTML agendas: the packet
+fallback only runs when `agenda_docs` is empty.
+
+### Per-Job 1500s asyncio.wait_for
+
+`pipeline/processor.py:274-340` + `config.py:96-102` —
+`run_single_job` now wraps both `process_meeting` and `process_matter` in
+`asyncio.wait_for(..., timeout=JOB_TIMEOUT_SECONDS)` (default 1500 seconds /
+25 minutes, env override `ENGAGIC_JOB_TIMEOUT_SECONDS`). On
+`asyncio.TimeoutError`, marks the queue row failed, logs
+`"job timed out"` with duration, and moves on.
+
+Driver: on 2026-04-16 a process-cities run locked a
+`southburlingtonVT_9c22543d` queue slot for 25+ minutes after two BETA
+Technologies PDFs hit the 600s PDF-extraction subprocess timeout. The
+subprocess timeouts themselves logged and were caught — but after that
+the pipeline went silent with CPU 60% and CLOSE-WAIT sockets on Gemini
+and PostgreSQL, stuck in asyncio cleanup of orphaned threads. No outer
+watchdog, no heartbeat, no recovery. The queue row stayed `processing`
+indefinitely; manual SIGTERM + SQL reset was the only way forward.
+
+The wait_for adds a hard wall-clock ceiling around the whole meeting
+coroutine. Orphan threads from hung `to_thread` calls still exist
+afterward (Python can't cancel threads), but the event loop advances and
+the queue slot frees. At worst each worker accumulates a few orphan
+threads per hour; forkserver child memory caps handle the RSS blast
+radius.
+
+Doesn't replace proper lease heartbeating on the queue row (still only
+`reset_stale_processing_jobs` on process startup), but closes the common
+hang class seen in practice.
+
+---
+
 ## [2026-04-11] Temporal Item Snapshots
 
 Each `items` row is now a frozen point-in-time snapshot of one appearance of a matter. The previous behavior stamped the latest canonical summary onto every appearance via `bulk_update_item_summaries`, destroying any per-appearance differences and making legislative-timeline views lie about history -- clicking a January appearance could show text that described attachments only added in March. The LA police/CAO budget matter (`losangelesCA_eb32b14d02c4a2e2`) happened to show three distinct summaries across its Jan/Feb appearances only because matter jobs had incomplete `item_ids` payloads and couldn't reach all the older rows. That was incidental, not by design. This change makes the per-appearance snapshot explicit and load-bearing.

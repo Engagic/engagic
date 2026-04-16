@@ -274,29 +274,33 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
     sequence_counter = 0
 
     for table in all_tables:
-        rows = table.find_all('tr')
+        rows = table.find_all('tr', recursive=False)
         for row in rows:
-            cells = row.find_all('td')
+            cells = row.find_all('td', recursive=False)
             if len(cells) < 2:
                 continue
 
-            number_cell = cells[0]
-            number_span = number_cell.find('span', style=lambda x: x and 'font-weight:bold' in x.lower() if x else False)
+            # Scan cells for the agenda-number cell. Top-level rows have
+            # [number, content]; indented sub-items (e.g. 5.A, 5.B) have
+            # [indent, number, content]. Deeper nesting pushes further right.
+            number_idx = None
+            agenda_number = None
+            for idx, cell in enumerate(cells):
+                bold = cell.find(
+                    'span',
+                    style=lambda x: x and 'font-weight:bold' in x.lower() if x else False,
+                ) or cell.find('b') or cell.find('strong')
+                text = bold.get_text(strip=True) if bold else ''
+                if text and re.match(r'^\d+\.?[A-Z]?\.?$', text):
+                    number_idx = idx
+                    agenda_number = text
+                    break
 
-            if not number_span:
-                bold = number_cell.find('b') or number_cell.find('strong')
-                if bold:
-                    agenda_number = bold.get_text(strip=True)
-                else:
-                    continue
-            else:
-                agenda_number = number_span.get_text(strip=True)
-
-            if not agenda_number or not re.match(r'^\d+\.?[A-Z]?\.?$', agenda_number):
+            if number_idx is None or number_idx + 1 >= len(cells):
                 continue
 
             sequence_counter += 1
-            content_cell = cells[1]
+            content_cell = cells[number_idx + 1]
             item_id = None
 
             anchor = content_cell.find('a', attrs={'name': True})
@@ -955,6 +959,140 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
             item_dict['metadata'] = {'section': current_section}
 
         items.append(item_dict)
+
+    # Strategy 4: flat-sibling inline layout (Placentia-style)
+    # <strong>SECTION:</strong> sits as a flat inline sibling of <br>, empty
+    # <blockquote>, <table> (item), <blockquote> (attachments). No wrapping
+    # per-item div. Sub-sections may be nested in sibling <div> elements, which
+    # find_all catches via document-order traversal.
+    def _extract_attachments_bounded(bq) -> List[Dict[str, Any]]:
+        """Like _extract_attachments but skips <div> subtrees that contain a
+        section-header <strong> so items don't absorb attachments belonging to
+        a sibling sub-section tucked inside them. Attachment-wrapper <div>s
+        (which carry only the MetaViewer <a>) are still walked into.
+        """
+        out = []
+        if not bq:
+            return out
+        def _walk(node):
+            for child in node.children:
+                if not getattr(child, 'name', None):
+                    continue
+                if child.name == 'div':
+                    inner_strongs = child.find_all('strong')
+                    is_section_scope = any(
+                        re.sub(r'[\s.:,\-\u2013\u2014]+$', '', s.get_text(strip=True)).strip()
+                        and re.sub(r'[\s.:,\-\u2013\u2014]+$', '', s.get_text(strip=True)).strip().lower() not in procedural
+                        for s in inner_strongs
+                    )
+                    if is_section_scope:
+                        continue  # handled by its own <strong> iteration
+                    # Otherwise it's just a wrapper — recurse in
+                if child.name == 'a' and child.get('href') and 'MetaViewer' in child.get('href', ''):
+                    href = child['href']
+                    name = child.get_text(strip=True) or 'Supporting Document'
+                    meta_match = re.search(r'meta_id=(\d+)', href)
+                    out.append({
+                        'name': name,
+                        'url': href,
+                        'type': 'pdf',
+                        'meta_id': meta_match.group(1) if meta_match else None,
+                    })
+                else:
+                    _walk(child)
+        _walk(bq)
+        return out
+
+    if not items:
+        seen_numbers = set()
+        # Only match integer-dot patterns; rejects "1)" sub-procedure steps that
+        # share the item-table shape but are motion substeps, not agenda items.
+        _AGENDA_NUM_RE = re.compile(r'^\d+(?:\.[A-Za-z0-9]+)*\.?$')
+
+        def _find_pivot(strong_el):
+            """Return the ancestor (up to 3 levels) whose following siblings
+            include tables/blockquotes. Placentia puts item tables as direct
+            siblings of the <strong>; Bullhead wraps each <strong> in its own
+            small <div> and places tables as siblings of that div.
+            """
+            node = strong_el
+            for _ in range(4):
+                if node.find_next_sibling(['table', 'blockquote']):
+                    return node
+                if node.parent is None or node.parent.name in ('body', '[document]'):
+                    return node
+                node = node.parent
+            return node
+
+        for strong in soup.find_all('strong'):
+            header_raw = strong.get_text(strip=True)
+            header_clean = re.sub(r'[\s.:,\-\u2013\u2014]+$', '', header_raw).strip()
+            if not header_clean or header_clean.lower() in procedural:
+                continue
+            # Skip long prose that happens to be bold (intro paragraphs, notes).
+            # Real section headers are short phrases; anything > 80 chars is
+            # almost certainly wrapped prose, not a header.
+            if len(header_clean) > 80:
+                continue
+            # Walk forward siblings from the pivot (strong or ancestor div),
+            # collecting item tables and their trailing attachment blockquotes.
+            # Stop when we hit another non-procedural <strong> or a nested
+            # <div> containing a new section-header <strong>.
+            section_name = header_clean
+            node = _find_pivot(strong)
+            while True:
+                node = node.find_next_sibling()
+                if node is None:
+                    break
+                if not getattr(node, 'name', None):
+                    continue
+                if node.name == 'strong':
+                    nxt_clean = re.sub(
+                        r'[\s.:,\-\u2013\u2014]+$', '', node.get_text(strip=True)
+                    ).strip().lower()
+                    if nxt_clean and nxt_clean not in procedural and len(nxt_clean) <= 80:
+                        break
+                    continue
+                if node.name == 'div':
+                    # A div is a section boundary only if it wraps a short,
+                    # non-procedural <strong> header. Prose divs (intro text,
+                    # descriptive blurbs in bold) are not boundaries.
+                    inner_strong = node.find('strong')
+                    if inner_strong:
+                        inner_clean = re.sub(
+                            r'[\s.:,\-\u2013\u2014]+$', '', inner_strong.get_text(strip=True)
+                        ).strip().lower()
+                        if inner_clean and inner_clean not in procedural and len(inner_clean) <= 80:
+                            break
+                    continue
+                if node.name != 'table':
+                    continue
+
+                item_data = _process_item_table(node, parent_section=section_name)
+                if not item_data or not item_data['title']:
+                    continue
+                num = item_data['number']
+                if not _AGENDA_NUM_RE.match(num):
+                    continue
+                if item_data['title'].rstrip('.').lower() in procedural:
+                    continue
+                dedup_key = f"{section_name}::{num}"
+                if dedup_key in seen_numbers:
+                    continue
+                seen_numbers.add(dedup_key)
+
+                att_bq = node.find_next_sibling('blockquote')
+                attachments = _extract_attachments_bounded(att_bq) if att_bq else []
+
+                sequence_counter += 1
+                items.append({
+                    'vendor_item_id': num,
+                    'title': item_data['title'],
+                    'sequence': sequence_counter,
+                    'agenda_number': num,
+                    'attachments': attachments,
+                    'metadata': {'section': section_name} if section_name else {},
+                })
 
     logger.debug(
         "parsed generated agendaviewer html",
