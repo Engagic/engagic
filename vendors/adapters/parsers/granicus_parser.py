@@ -281,8 +281,14 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
                 continue
 
             # Scan cells for the agenda-number cell. Top-level rows have
-            # [number, content]; indented sub-items (e.g. 5.A, 5.B) have
-            # [indent, number, content]. Deeper nesting pushes further right.
+            # [number, content]; Whittier-style indented sub-items
+            # (5.A, 5.B) have [indent, number, content] with bold numbers;
+            # Concord-style sub-items (a., b., c.) use [number, content]
+            # with *unbolded* letter labels while the title in cell[1] is
+            # bolded. So we accept the bold-span text when present, else
+            # fall back to the whole cell text, and match numeric OR
+            # bare-lowercase-letter patterns.
+            _NUM_RE = re.compile(r'^(?:\d+\.?[A-Za-z]?\.?|[a-z]\.)$')
             number_idx = None
             agenda_number = None
             for idx, cell in enumerate(cells):
@@ -290,10 +296,10 @@ def parse_agendaonline_html(html: str, base_url: str) -> Dict[str, Any]:
                     'span',
                     style=lambda x: x and 'font-weight:bold' in x.lower() if x else False,
                 ) or cell.find('b') or cell.find('strong')
-                text = bold.get_text(strip=True) if bold else ''
-                if text and re.match(r'^\d+\.?[A-Z]?\.?$', text):
+                candidate = bold.get_text(strip=True) if bold else cell.get_text(strip=True)
+                if candidate and _NUM_RE.match(candidate):
                     number_idx = idx
-                    agenda_number = text
+                    agenda_number = candidate
                     break
 
             if number_idx is None or number_idx + 1 >= len(cells):
@@ -1094,6 +1100,17 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
                     'metadata': {'section': section_name} if section_name else {},
                 })
 
+    # Strategy 5: numberspace-flat fallback (Rancho Santa Margarita style)
+    # Pages with malformed body nesting (unclosed divs) hide item tables under
+    # a single body-level div that neither strategy 1 nor strategy 4 can
+    # navigate. Re-scan via td.numberspace cells directly when the previous
+    # strategies found far fewer items than the page actually contains.
+    numberspace_cells = soup.find_all('td', class_='numberspace')
+    if len(numberspace_cells) >= 6 and len(items) < len(numberspace_cells) // 3:
+        ns_items = _parse_numberspace_layout(soup)
+        if len(ns_items) > len(items):
+            items = ns_items
+
     logger.debug(
         "parsed generated agendaviewer html",
         vendor="granicus",
@@ -1101,6 +1118,135 @@ def parse_generated_agendaviewer_html(html: str) -> Dict[str, Any]:
     )
 
     return {'participation': {}, 'items': items}
+
+
+# Number patterns for the numberspace layout walker
+_NS_ITEM_NUM_RE = re.compile(r'^(\d+)(?:\.(\d+))?\.?$')
+_NS_SUBSTEP_RE = re.compile(r'^[a-z0-9]+\)$', re.I)
+
+# Section headers that are pure scaffolding -- drop both header and sub-items
+_NS_SKIP_SECTIONS = {
+    'public hearing items', 'new business', 'continued items',
+    'items removed from the consent calendar',
+    'matters presented by mayor and council members',
+    'public comments', 'city manager report',
+}
+
+
+def _parse_numberspace_layout(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """Walk td.numberspace cells in document order.
+
+    Used when body structure is malformed (unclosed divs) but item tables are
+    still well-formed locally. Classifies each cell by its number pattern:
+        "N."  with <strong>  -> section header (e.g. "5. CONSENT CALENDAR")
+        "N.M"                -> agenda sub-item under section N
+        "N)"                 -> motion sub-step; skipped
+    Attachments are MetaViewer links inside the blockquote that follows each
+    item's containing table.
+    """
+    items: List[Dict[str, Any]] = []
+    current_section = ""
+    sequence_counter = 0
+    seen_numbers = set()
+
+    for td in soup.find_all('td', class_='numberspace'):
+        num_text = td.get_text(strip=True).rstrip('.')
+        if not num_text or _NS_SUBSTEP_RE.match(num_text):
+            continue
+        m = _NS_ITEM_NUM_RE.match(num_text)
+        if not m:
+            continue
+        is_top = m.group(2) is None
+
+        title_td = td.find_next_sibling('td')
+        if not title_td:
+            continue
+
+        # Sectionhood: only the number cell's <strong> counts. The title
+        # cell often carries an inline <strong>Recommendation:...</strong>
+        # which would mis-tag a regular agenda item (PVE items 3-9) as a
+        # section header if we accepted any nested strong.
+        is_section = is_top and td.find('strong') is not None
+
+        # Prefer a section title wrapped in a <strong> that spans the full
+        # title cell; fall back to the cell's raw text. Inline strong tags
+        # used for Recommendation callouts would truncate the real title.
+        strong_for_title = None
+        if is_section:
+            candidate_strong = title_td.find('strong')
+            if candidate_strong:
+                strong_for_title = candidate_strong
+        if strong_for_title:
+            title = strong_for_title.get_text(separator=' ', strip=True)
+        else:
+            title = title_td.get_text(separator=' ', strip=True)
+        title = re.split(r'Recommendation\s*:', title, maxsplit=1, flags=re.I)[0]
+        title = ' '.join(title.split()).strip().rstrip(':').strip()
+
+        if not title:
+            continue
+
+        title_key = title.lower()
+        if is_section:
+            if title_key in _NS_SKIP_SECTIONS:
+                current_section = ''
+                continue
+            current_section = title
+            continue
+
+        if title_key in _NS_SKIP_SECTIONS:
+            continue
+
+        if num_text in seen_numbers:
+            continue
+        seen_numbers.add(num_text)
+
+        # Attachment harvest: walk document forward from this item's
+        # number cell until we hit the next *item-level* numberspace cell
+        # (or EOF) and collect every MetaViewer link in between.
+        # Sub-step cells ("1)", "2)") are skipped so attachments that live
+        # after motion sub-steps (RSM 5.2 APPROVAL OF MINUTES pattern) are
+        # still captured.
+        attachments: List[Dict[str, Any]] = []
+        seen_meta_ids = set()
+        for node in td.find_all_next():
+            node_name = getattr(node, 'name', None)
+            if node_name == 'td' and 'numberspace' in (node.get('class') or []):
+                peek = node.get_text(strip=True).rstrip('.')
+                if peek and not _NS_SUBSTEP_RE.match(peek):
+                    break
+                continue
+            if node_name != 'a':
+                continue
+            href = node.get('href', '')
+            if not href or 'MetaViewer' not in href:
+                continue
+            meta_id_match = re.search(r'meta_id=(\d+)', href)
+            meta_id = meta_id_match.group(1) if meta_id_match else None
+            if meta_id and meta_id in seen_meta_ids:
+                continue
+            if meta_id:
+                seen_meta_ids.add(meta_id)
+            attachments.append({
+                'name': node.get_text(strip=True) or 'Supporting Document',
+                'url': href,
+                'type': 'pdf',
+                'meta_id': meta_id,
+            })
+
+        sequence_counter += 1
+        item_dict: Dict[str, Any] = {
+            'vendor_item_id': num_text,
+            'title': title,
+            'sequence': sequence_counter,
+            'agenda_number': num_text,
+            'attachments': attachments,
+        }
+        if current_section:
+            item_dict['metadata'] = {'section': current_section}
+        items.append(item_dict)
+
+    return items
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,6 @@
  * the manager automatically re-verifies.
  */
 
-import { config } from './api/config';
 import { setExtraHeaders, getExtraHeaders } from './api/api-client';
 
 declare global {
@@ -24,7 +23,6 @@ declare global {
 }
 
 const SITE_KEY = '0x4AAAAAAC8k9WNTYMFPIDOj';
-const VERIFY_URL = `${config.apiBaseUrl}/api/turnstile/verify`;
 
 let widgetId: string | null = null;
 let currentToken: string | null = null;
@@ -98,26 +96,16 @@ function waitForToken(): Promise<string> {
 }
 
 async function exchangeForSession(turnstileToken: string): Promise<string | null> {
-	// Set the SSR gate cookie via /challenge (same-origin, auto-applies Set-Cookie)
-	// so that future navigations to content pages pass the hooks.server.ts gate
-	// without an interstitial redirect.
+	// Single siteverify round-trip: /challenge sets the SSR gate cookie AND
+	// returns the API session_token. Cloudflare's siteverify only accepts each
+	// token once, so we cannot call both /challenge and /api/turnstile/verify
+	// from the browser -- one would always fail with timeout-or-duplicate.
 	try {
-		await fetch('/challenge', {
+		const resp = await fetch('/challenge', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ token: turnstileToken }),
 			credentials: 'same-origin',
-		});
-	} catch {
-		// Non-fatal; the gate will still challenge on next navigation.
-	}
-
-	// Exchange token for API session (separate from SSR cookie).
-	try {
-		const resp = await fetch(VERIFY_URL, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ token: turnstileToken }),
 		});
 		if (!resp.ok) return null;
 		const data = await resp.json();

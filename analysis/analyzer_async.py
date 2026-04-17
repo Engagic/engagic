@@ -343,9 +343,29 @@ class AsyncAnalyzer:
                             resolved_url=pdf_url[:120],
                         )
                         return await self.download_pdf_async(pdf_url, _depth=_depth + 1)
-                    else:
-                        logger.debug("html attachment page had no pdf links", url=url[:120])
-                        raise ExtractionError(f"Attachment page contained no PDF links: {url[:120]}")
+
+                    # OnBase dual-endpoint: different Hyland deployments serve
+                    # the PDF via different paths. Whittier CA / Santa Barbara
+                    # respond to /Documents/ViewDocument/ and 404 on
+                    # /DownloadFileBytes/; Concord CA / Tampa respond to
+                    # /DownloadFileBytes/ and 404 on /ViewDocument/. The
+                    # adapter picks one; if it's the wrong one for a given
+                    # deployment, swap and retry once.
+                    onbase_alt = None
+                    if "/Documents/ViewDocument/" in url:
+                        onbase_alt = url.replace("/Documents/ViewDocument/", "/Documents/DownloadFileBytes/")
+                    elif "/Documents/DownloadFileBytes/" in url:
+                        onbase_alt = url.replace("/Documents/DownloadFileBytes/", "/Documents/ViewDocument/")
+                    if onbase_alt and onbase_alt != url:
+                        logger.info(
+                            "onbase endpoint returned html, retrying alternate",
+                            original_url=url[:120],
+                            alt_url=onbase_alt[:120],
+                        )
+                        return await self.download_pdf_async(onbase_alt, _depth=_depth + 1)
+
+                    logger.debug("html attachment page had no pdf links", url=url[:120])
+                    raise ExtractionError(f"Attachment page contained no PDF links: {url[:120]}")
 
                 # Unknown content type -- try using it as-is (could be octet-stream)
                 logger.debug("pdf downloaded", url=url, size_mb=round(len(raw_bytes) / 1024 / 1024, 2))

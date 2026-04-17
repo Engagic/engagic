@@ -776,12 +776,113 @@ def _parse_toc_v2(doc, result: _ParsedAgenda):
 
         result.items.append(item)
 
+    # Title recovery for packet PDFs whose TOC entries are just
+    # "Item 8.1 - Cover Page" / "Item 8.1 - foo.docx". The real human-readable
+    # titles live on the agenda summary pages, where the item number prefix
+    # (e.g. "8.1", "9.3") is followed by the title text, often wrapped across
+    # lines. We scan pages 0..N for numbered prefixes matching our items and
+    # splice in the recovered title when the TOC title is missing or just a
+    # bookmark artifact ("- Cover Page", attachment filenames).
+    if any(_title_is_packet_artifact(it.title) for it in result.items):
+        recovered = _recover_item_titles_from_agenda(doc, result.items)
+        for it in result.items:
+            if it.number and it.number in recovered and _title_is_packet_artifact(it.title):
+                it.title = recovered[it.number]
+
     logger.debug(
         "v2 toc parsed",
         item_count=len(result.items),
         item_level=item_level,
         total_memos=sum(len(it.memos) for it in result.items),
     )
+
+
+_PACKET_ARTIFACT_RE = re.compile(
+    r'^\s*[-\u2013\u2014]?\s*(cover\s*page|'
+    r'.*\.(?:docx?|pdf|pptx?|xlsx?))\s*$',
+    re.IGNORECASE,
+)
+
+
+def _title_is_packet_artifact(title: str) -> bool:
+    """True if this title is a TOC artifact (cover page, attachment filename)."""
+    if not title or not title.strip():
+        return True
+    t = title.strip().lstrip('-\u2013\u2014').strip()
+    if not t:
+        return True
+    return bool(_PACKET_ARTIFACT_RE.match(title))
+
+
+def _recover_item_titles_from_agenda(doc, items: List[_AgendaItem]) -> Dict[str, str]:
+    """Scan agenda summary pages for item-number prefixes and capture titles.
+
+    Returns {number -> title}. Titles are the text immediately after the
+    number prefix, wrapped across lines until the next item number or blank
+    line.
+    """
+    wanted = {it.number for it in items if it.number}
+    if not wanted:
+        return {}
+
+    first_item_page = min(
+        (it.page_start for it in items if it.number and it.page_start),
+        default=_MAX_AGENDA_PAGES + 1,
+    )
+    scan_end = min(first_item_page, _MAX_AGENDA_PAGES + 1, doc.page_count)
+
+    agenda_text = []
+    for p in range(scan_end):
+        agenda_text.append(doc[p].get_text("text"))
+    all_lines = "\n".join(agenda_text).split("\n")
+
+    # Numbers matching our item set. Two shapes to handle:
+    #   "9.2 REVIEW OF ..."        inline number + title
+    #   "9.4\nAWARD OF CONTRACT..."  number alone, title on next line(s)
+    num_re_parts = [re.escape(n) for n in sorted(wanted, key=len, reverse=True)]
+    prefix_inline_re = re.compile(r'^\s*(' + '|'.join(num_re_parts) + r')\.?\s+(.+)')
+    prefix_solo_re = re.compile(r'^\s*(' + '|'.join(num_re_parts) + r')\.?\s*$')
+    stop_re = re.compile(r'^\s*\d+(?:\.\d+)?\.?\s*(?:\S.*)?$')
+
+    recovered: Dict[str, str] = {}
+    i = 0
+    while i < len(all_lines):
+        line = all_lines[i]
+        m_inline = prefix_inline_re.match(line)
+        if m_inline:
+            number = m_inline.group(1)
+            title_parts = [m_inline.group(2).strip()]
+            j = i + 1
+        else:
+            m_solo = prefix_solo_re.match(line)
+            if not m_solo:
+                i += 1
+                continue
+            number = m_solo.group(1)
+            title_parts = []
+            j = i + 1
+
+        while j < len(all_lines):
+            nxt = all_lines[j].strip()
+            if not nxt:
+                if title_parts:
+                    break
+                j += 1
+                continue
+            if stop_re.match(nxt):
+                break
+            title_parts.append(nxt)
+            j += 1
+            if sum(len(p) for p in title_parts) > 300:
+                break
+
+        title = ' '.join(title_parts).strip()
+        title = re.sub(r'\s+', ' ', title).rstrip(' ,.;')
+        if title and number not in recovered:
+            recovered[number] = title[:250]
+        i = max(j, i + 1)
+
+    return recovered
 
 
 def _extract_body_from_agenda_page(doc, page_0: int, toc_title: str) -> str:
@@ -847,9 +948,21 @@ def _parse_v2_internal(pdf_path: str, force_method: Optional[str] = None) -> _Pa
             _parse_url_v2(doc, result)
         elif path == "url_then_toc":
             _parse_url_v2(doc, result)
-            if not result.items:
+            # Packet PDFs where the agenda summary pages have no links but a
+            # staff report cover page carries attachment links get misrouted:
+            # URL path finds a single cluster ("item 8.1 and its PDFs") and
+            # declares victory. If the TOC groups into noticeably more items,
+            # prefer it. (Lynwood CA: URL=1 item, TOC grouped=16 items.)
+            url_items = list(result.items)
+            url_orphans = list(result.orphan_links)
+            if len(url_items) < 3:
+                result.items = []
                 result.orphan_links.clear()
                 _parse_toc_v2(doc, result)
+                if len(result.items) <= len(url_items):
+                    result.items = url_items
+                    result.orphan_links = url_orphans
+                    result.metadata.parse_method = "v2_url"
         elif path == "pageref":
             _parse_pageref_v2(doc, result)
         # "empty" -> no items, monolithic fallback

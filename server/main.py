@@ -119,13 +119,16 @@ else:
     logger.info("JWT authentication initialized")
 
 
-# Register middleware (execution order: metrics -> rate limiting -> logging)
-# FastAPI middleware stack: last registered runs first, so register in reverse order
-@app.middleware("http")
-async def log_requests_middleware(request, call_next):
-    return await log_requests(request, call_next)
-
-
+# Register middleware. FastAPI/Starlette: last registered wraps outermost,
+# so the request flows outer -> inner from the bottom of this block upward.
+#
+# Desired request flow:
+#   log_requests -> metrics -> rate_limit -> turnstile -> endpoint
+#
+# log_requests and metrics MUST wrap rate_limit/turnstile so that early 403/429
+# responses from those middlewares still show up in the access log and in
+# Prometheus counters. Previously logging was innermost, which silently
+# dropped every rate-limited request from the access log.
 @app.middleware("http")
 async def turnstile_middleware_wrapper(request, call_next):
     from server.middleware.turnstile import turnstile_middleware
@@ -141,6 +144,11 @@ async def rate_limit_middleware_wrapper(request, call_next):
 @app.middleware("http")
 async def metrics_middleware_wrapper(request, call_next):
     return await metrics_middleware(request, call_next)
+
+
+@app.middleware("http")
+async def log_requests_middleware(request, call_next):
+    return await log_requests(request, call_next)
 
 
 # Mount routers (duckling first -- must match before parametric routes)

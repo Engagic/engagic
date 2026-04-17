@@ -26,7 +26,6 @@ westhollywoodCA
 hermosabeachCA
 
 # Orange County
-orangecountyCA
 anaheimCA
 irvineCA
 santaanaCA

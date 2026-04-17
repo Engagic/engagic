@@ -210,6 +210,7 @@ class AsyncBaseAdapter:
             "%b %d, %Y %I:%M %p", "%B %d, %Y %I:%M %p", "%m/%d/%Y %I:%M %p", "%m/%d/%Y %I:%M:%S %p",
             "%b %d, %Y %H:%M", "%B %d, %Y %H:%M", "%m/%d/%Y %H:%M",
             "%Y-%m-%d", "%b %d, %Y", "%B %d, %Y", "%m/%d/%Y",
+            "%b %d %Y", "%B %d %Y",  # comma-less (civicengage historical agendas)
             "%B %d, %Y at %I:%M %p", "%A, %B %d, %Y @ %I:%M %p",
         ]
 

@@ -588,12 +588,17 @@ class PdfExtractor:
         ocr_words = len(ocr_result.split())
 
         # OCR is better if:
-        # 1. Produced significantly more text (2x+ characters) with reasonable quality (>40% letters)
-        # 2. OR produced more text with high quality (>70% letters)
+        # 1. Original was empty -- keep any OCR output that isn't pure noise.
+        #    Warrant registers, check runs, and tax rolls are numeric-heavy
+        #    and dip below the 40% letter-ratio floor; dropping them would
+        #    lose the page entirely.
+        # 2. OR produced significantly more text (2x+ chars) at >40% letters
+        # 3. OR produced more text at >70% letters
+        empty_original_ocr_usable = orig_chars == 0 and ocr_chars >= 100 and ocr_letter_ratio > 0.15
         significantly_more = ocr_chars >= (orig_chars * 2) and ocr_letter_ratio > 0.4
         high_quality_improvement = ocr_chars > orig_chars and ocr_letter_ratio > 0.7
 
-        if significantly_more or high_quality_improvement:
+        if empty_original_ocr_usable or significantly_more or high_quality_improvement:
             logger.info(
                 f"[PyMuPDF] Page {page_num}: Using OCR "
                 f"({ocr_chars} chars, {ocr_words} words, {ocr_letter_ratio:.1%} letters > original {orig_chars} chars)"

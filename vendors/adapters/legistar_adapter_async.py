@@ -19,6 +19,32 @@ from pipeline.utils import combine_date_time
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError, VendorParsingError
 import aiohttp
+import os
+
+# Minimum item count from MeetingDetail before we treat the page as a stub
+# and retry via AADA when an AADA link is present in the calendar row.
+# LA County MeetingDetail stubs typically return <=2 procedural rows.
+AADA_RETRY_MIN_ITEMS = 3
+PREFER_AADA_CONFIG = "data/legistar_prefer_aada.json"
+
+
+def _load_prefer_aada_slugs() -> set:
+    """Load slugs where AADA agenda is preferred over MeetingDetail.
+
+    LA County's MeetingDetail page renders but returns only stub rows
+    ("Public Comment", "Adjournment") despite having a full AADA agenda.
+    """
+    if not os.path.exists(PREFER_AADA_CONFIG):
+        return set()
+    try:
+        with open(PREFER_AADA_CONFIG, "r") as f:
+            data = json.load(f)
+        return set(data.get("slugs", []))
+    except (JSONDecodeError, OSError):
+        return set()
+
+
+_PREFER_AADA_SLUGS = _load_prefer_aada_slugs()
 
 
 class AsyncLegistarAdapter(AsyncBaseAdapter):
@@ -33,6 +59,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
         super().__init__(city_slug, vendor="legistar", metrics=metrics)
         self.api_token = api_token
         self.base_url = f"https://webapi.legistar.com/v1/{self.slug}"
+        self.prefer_aada = self.slug in _PREFER_AADA_SLUGS
 
     async def _fetch_meetings_impl(self, days_back: int = 14, days_forward: int = 14) -> List[Dict[str, Any]]:
         """Fetch meetings via API, falling back to HTML if needed."""
@@ -879,29 +906,31 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if len(cells) < 6:
                 return None
 
-            # Extract meeting detail link (primary path)
+            # Capture BOTH links when present.
+            # MeetingDetail is preferred by default, but (a) when prefer_aada
+            # is set for this slug we skip straight to AADA, and (b) when
+            # MeetingDetail returns a stub item list we retry with AADA.
             detail_link = row.find("a", href=lambda x: x and "MeetingDetail.aspx" in x)
-            aada_link = None
+            aada_link = row.find("a", href=lambda x: x and "View.ashx" in x and "M=AADA" in x)
             detail_url = None
             aada_url = None
+            meeting_id = None
 
             if detail_link:
                 detail_url = urljoin(html_base_url, detail_link["href"])
                 meeting_id_match = re.search(r"ID=(\d+)", detail_url)
-                if not meeting_id_match:
-                    return None
-                meeting_id = meeting_id_match.group(1)
-            else:
-                # Fallback: AADA (Accessible Agenda) link for sites where
-                # MeetingDetail is "Not viewable by the public" (e.g. LA County)
-                aada_link = row.find("a", href=lambda x: x and "View.ashx" in x and "M=AADA" in x)
-                if not aada_link:
-                    return None
+                if meeting_id_match:
+                    meeting_id = meeting_id_match.group(1)
+
+            if aada_link:
                 aada_url = urljoin(html_base_url, aada_link["href"])
-                meeting_id_match = re.search(r"ID=(\d+)", aada_url)
-                if not meeting_id_match:
-                    return None
-                meeting_id = meeting_id_match.group(1)
+                if not meeting_id:
+                    meeting_id_match = re.search(r"ID=(\d+)", aada_url)
+                    if meeting_id_match:
+                        meeting_id = meeting_id_match.group(1)
+
+            if not meeting_id:
+                return None
 
             # Skip video clip IDs
             if meeting_id.startswith('clip_'):
@@ -975,22 +1004,71 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             if agenda_link:
                 packet_url = urljoin(html_base_url, agenda_link["href"])
 
-            if detail_url:
-                # Normal path: fetch meeting detail page for items
-                meeting_data = await self._fetch_meeting_detail_html_async(
-                    meeting_id, meeting_dt, title, detail_url, packet_url
-                )
-            else:
-                # AADA fallback: parse accessible agenda HTML for items
-                meeting_data = await self._fetch_aada_agenda_async(
+            # Config-driven short-circuit: some Legistar instances (e.g. LA
+            # County) expose a MeetingDetail link that technically resolves
+            # but only contains stub rows. Prefer AADA for known offenders.
+            if self.prefer_aada and aada_url:
+                return await self._fetch_aada_agenda_async(
                     meeting_id, meeting_dt, title, aada_url, packet_url
                 )
 
-            return meeting_data
+            if detail_url:
+                meeting_data = await self._fetch_meeting_detail_html_async(
+                    meeting_id, meeting_dt, title, detail_url, packet_url
+                )
+                # Runtime retry: if MeetingDetail returned a stub and an AADA
+                # link was advertised in the calendar row, fetch AADA and keep
+                # whichever yielded more items.
+                if aada_url and self._is_stub_meeting(meeting_data):
+                    logger.info(
+                        "meeting detail returned stub, retrying via AADA",
+                        slug=self.slug,
+                        meeting_id=meeting_id,
+                        detail_item_count=len((meeting_data or {}).get("items", [])),
+                    )
+                    aada_data = await self._fetch_aada_agenda_async(
+                        meeting_id, meeting_dt, title, aada_url, packet_url
+                    )
+                    meeting_data = self._pick_richer_meeting(meeting_data, aada_data)
+                return meeting_data
+
+            if aada_url:
+                return await self._fetch_aada_agenda_async(
+                    meeting_id, meeting_dt, title, aada_url, packet_url
+                )
+
+            return None
 
         except (AttributeError, IndexError, ValueError, TypeError) as e:
             logger.warning("error parsing meeting row", error=str(e))
             return None
+
+    @staticmethod
+    def _is_stub_meeting(meeting_data: Optional[Dict[str, Any]]) -> bool:
+        """True when MeetingDetail yielded fewer items than AADA_RETRY_MIN_ITEMS.
+
+        A "stub" is a MeetingDetail page that renders but only contains
+        procedural filler (Public Comment, Adjournment) because the full
+        agenda is published via AADA only. Confidence: 7/10 -- item count
+        is a cheap proxy; some genuinely short meetings will trigger a
+        redundant AADA fetch, which is acceptable overhead.
+        """
+        if not meeting_data:
+            return True
+        items = meeting_data.get("items") or []
+        return len(items) < AADA_RETRY_MIN_ITEMS
+
+    @staticmethod
+    def _pick_richer_meeting(
+        detail_data: Optional[Dict[str, Any]],
+        aada_data: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Return whichever meeting carries more items, preferring AADA on ties."""
+        detail_items = len((detail_data or {}).get("items") or [])
+        aada_items = len((aada_data or {}).get("items") or [])
+        if aada_items >= detail_items and aada_data is not None:
+            return aada_data
+        return detail_data
 
     async def _fetch_meeting_detail_html_async(
         self,

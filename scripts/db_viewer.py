@@ -10,6 +10,7 @@ import sys
 import os
 import asyncio
 import re
+import unicodedata
 from datetime import datetime
 from typing import Optional
 
@@ -19,6 +20,17 @@ from uszipcode import SearchEngine
 
 from database.db_postgres import Database
 from database.models import Jurisdiction
+
+
+def to_banana_slug(name: str) -> str:
+    """Normalize a jurisdiction name to its banana slug fragment.
+
+    Strips diacritics so n-tilde -> n, e-acute -> e, etc. The prior
+    [^a-zA-Z0-9] regex dropped them entirely (La Canada -> lacaada).
+    """
+    normalized = unicodedata.normalize("NFKD", name)
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-zA-Z0-9]", "", ascii_only).lower()
 
 
 # State abbreviation to FIPS code mapping
@@ -431,7 +443,7 @@ class DatabaseViewer:
                 population = auto_population
 
             # Generate banana
-            banana = re.sub(r"[^a-zA-Z0-9]", "", city_name).lower() + state.upper()
+            banana = to_banana_slug(city_name) + state.upper()
 
             city = Jurisdiction(
                 banana=banana,
@@ -514,7 +526,7 @@ class DatabaseViewer:
             population = int(pop_input) if pop_input else None
 
             # Generate banana: alamedacountyCA
-            banana = re.sub(r"[^a-zA-Z0-9]", "", county_name).lower() + "county" + state.upper()
+            banana = to_banana_slug(county_name) + "county" + state.upper()
 
             # Display name includes "County"
             display_name = f"{county_name} County"

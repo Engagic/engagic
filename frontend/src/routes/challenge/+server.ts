@@ -46,16 +46,26 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 	}
 
 	// Proxy to backend for siteverify. Backend /api/turnstile/verify is already
-	// exempt from its own Turnstile middleware, so no auth needed here.
+	// exempt from its own Turnstile middleware and from rate limiting, so no
+	// auth needed here.
+	//
+	// Cloudflare siteverify rejects any token used more than once
+	// (error code: timeout-or-duplicate). Previously the browser also called
+	// /api/turnstile/verify directly with the same token, which meant one of
+	// the two calls always failed. Now /challenge is the single siteverify
+	// path, and the session_token is returned to the browser for use as
+	// X-Turnstile-Token on API requests.
 	let verifySuccess = false;
+	let sessionToken: string | null = null;
 	try {
 		const resp = await fetch(`${config.apiBaseUrl}/api/turnstile/verify`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ token })
 		});
-		const data = (await resp.json()) as { success?: boolean };
+		const data = (await resp.json()) as { success?: boolean; session_token?: string };
 		verifySuccess = resp.ok && !!data.success;
+		sessionToken = data.session_token ?? null;
 	} catch {
 		return new Response(JSON.stringify({ error: 'backend_unreachable' }), {
 			status: 502,
@@ -63,7 +73,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 		});
 	}
 
-	if (!verifySuccess) {
+	if (!verifySuccess || !sessionToken) {
 		return new Response(JSON.stringify({ error: 'turnstile_failed' }), {
 			status: 403,
 			headers: { 'Content-Type': 'application/json' }
@@ -80,7 +90,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 		maxAge: COOKIE_TTL_SECONDS
 	});
 
-	return new Response(JSON.stringify({ success: true }), {
+	return new Response(JSON.stringify({ success: true, session_token: sessionToken }), {
 		headers: { 'Content-Type': 'application/json' }
 	});
 };
