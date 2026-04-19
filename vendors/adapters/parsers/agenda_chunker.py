@@ -165,6 +165,10 @@ SECTION_PATTERNS = [
     r'AGREEMENTS?$',
     r'AUDITS?$',
     r'ORDINANCES?$',
+    # Bare "AGENDA" as the only header on thin civicweb printPdf renders
+    # (Bee Cave TX): no "CONSENT AGENDA" / "REGULAR AGENDA" precedes items,
+    # so without this the standalone-number lookahead path never activates.
+    r'AGENDA$',
 ]
 
 SECTION_RE = re.compile(
@@ -202,6 +206,11 @@ ATTACHMENT_URL_PATTERNS = [
     r'/DocumentCenter/View/',
     r'cloudfront\.net',
     r'\.sharepoint\.com/',
+    # CivicWeb / Diligent One Platform — document URLs are
+    # /document/{uuid-or-int} with no file extension; UUID form is
+    # the per-item attachment link, integer form is the packet.
+    r'diligentoneplatform\.com/document/',
+    r'\.civicweb\.net/document/',
 ]
 ATTACHMENT_URL_RE = re.compile('|'.join(ATTACHMENT_URL_PATTERNS), re.IGNORECASE)
 
@@ -252,6 +261,26 @@ def _extract_page_text_with_positions(page):
     return lines
 
 
+_HTTPS_ONLY_HOSTS = (
+    "community.diligentoneplatform.com",
+    "community.highbond.com",
+    ".civicweb.net",
+)
+
+
+def _normalize_link_url(uri: str) -> str:
+    """Upgrade http:// → https:// for hosts that drop plaintext.
+
+    CivicWeb / Diligent One Platform PDFs embed http:// links, but the
+    servers ignore plaintext connections (15s+ hangs with no response).
+    The stored link works fine in browsers via redirect, but our aiohttp
+    fetches in `_resolve_sub_attachments` time out one by one.
+    """
+    if uri.startswith("http://") and any(h in uri for h in _HTTPS_ONLY_HOSTS):
+        return "https://" + uri[len("http://"):]
+    return uri
+
+
 def _extract_links(page):
     """Extract all URI links from a page."""
     links = []
@@ -261,6 +290,7 @@ def _extract_links(page):
         uri = link.get("uri", "")
         if not uri:
             continue
+        uri = _normalize_link_url(uri)
         bbox = link.get("from", fitz.Rect())
         display_text = _get_link_display_text(page, fitz.Rect(bbox))
         links.append({
@@ -372,24 +402,17 @@ def _is_likely_item_header(line, lines_context=None):
 
         return False, None, None, 0
 
-    # Standalone number line — look ahead for title
+    # Standalone number line — look ahead for title.
+    # We used to gate this on current_section being a recognized agenda
+    # section header ("CONSENT AGENDA", "REGULAR AGENDA", etc.), but thin
+    # civicweb printPdf agendas (Bee Cave TX) render without any section
+    # banner — just "AGENDA" on line 0 and bare numbered items after. The
+    # caller already scopes us to the first _MAX_PAGES_FOR_TEXT_ITEMS pages
+    # and the lookahead below is self-limiting (stops at next number, stops
+    # at bold/upper section header, caps at 2 title lines), so body-text
+    # false positives remain bounded without the gate.
     if lines_context is not None:
-        line_idx, all_lines, current_section = lines_context
-        agenda_sections = {
-            'CONSENT AGENDA', 'CONSENT CALENDAR', 'REGULAR AGENDA',
-            'PUBLIC HEARINGS', 'DISCUSSION', 'ACTION', 'NEW BUSINESS',
-            'OLD BUSINESS', 'UNFINISHED BUSINESS', 'SPECIAL PRESENTATIONS',
-            'THESE ITEMS WILL REQUIRE APPROVAL BY COUNCIL',
-            'THESE ITEMS REQUIRE ONLY PLANNING COMMISSION APPROVAL',
-            'APPROVAL OF MINUTES', 'AGENDA ITEMS', 'TABLED ITEMS',
-            'RESOLUTIONS', 'AGREEMENTS', 'AUDITS', 'ORDINANCES',
-        }
-        in_agenda_section = any(
-            s in (current_section or '').upper() for s in agenda_sections
-        ) or (current_section or '').upper() in agenda_sections
-
-        if not in_agenda_section:
-            return False, None, None, 0
+        line_idx, all_lines, _ = lines_context
 
         title_parts = []
         consumed = 0

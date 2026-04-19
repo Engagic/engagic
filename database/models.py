@@ -107,6 +107,7 @@ class Jurisdiction:
     state: str  # CA
     vendor: str  # primegov, legistar, granicus, etc.
     slug: str  # cityofpaloalto (vendor-specific)
+    extra_vendors: Optional[List[Dict[str, str]]] = None  # Additive [{vendor, slug}] for multi-vendor jurisdictions; NULL for 99% of rows
     type: Optional[str] = None  # city, county, utility, transit, water_district, school_board, etc.
     county_banana: Optional[str] = None  # FK to parent county jurisdiction
     status: str = "active"

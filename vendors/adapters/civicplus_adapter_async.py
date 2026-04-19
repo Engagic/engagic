@@ -219,8 +219,8 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
             if existing:
                 # Prefer master agenda / packet over plain agenda --
                 # master agendas have the full packet PDF we can chunk.
-                new_title = meeting.get("title", "").lower()
-                old_title = existing.get("title", "").lower()
+                new_title = (meeting.get("title") or "").lower()
+                old_title = (existing.get("title") or "").lower()
                 new_is_master = bool(re.search(r"master\s+agenda|agenda\s+packet|full\s+packet", new_title))
                 old_is_master = bool(re.search(r"master\s+agenda|agenda\s+packet|full\s+packet", old_title))
                 if new_is_master and not old_is_master:

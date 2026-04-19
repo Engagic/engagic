@@ -237,13 +237,14 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                             self._sync_stats["total_attachments"] += len(item.get("attachments", []))
                     if result.get("participation"):
                         self._sync_stats["meetings_with_deadline"] += 1
-            except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError, KeyError, AttributeError, TypeError, ValueError) as e:
                 logger.error(
                     "error processing meeting",
                     vendor="chicago",
                     slug=self.slug,
                     meeting_id=meeting.get('meetingId'),
-                    error=str(e)
+                    error=str(e),
+                    error_type=type(e).__name__,
                 )
                 continue
 
@@ -309,7 +310,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
             result["location"] = location
 
         # Extract meeting status from API status field
-        api_status = meeting_detail.get("status", "").lower()
+        api_status = (meeting_detail.get("status") or "").lower()
         status_map = {
             "canceled": "cancelled",
             "cancelled": "cancelled",
@@ -438,7 +439,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
                 # Extract item data
                 matter_id = item.get("matterId")
                 comment_id = item.get("commentId")
-                title = item.get("matterTitle", "").strip()
+                title = (item.get("matterTitle") or "").strip()
                 sequence = int(item.get("sort") or 0)
                 record_number = item.get("recordNumber")
                 matter_type = item.get("matterType")
@@ -561,7 +562,7 @@ class AsyncChicagoAdapter(AsyncBaseAdapter):
         # Find Agenda file (prefer "Agenda" type, fallback to first PDF)
         agenda_file = next(
             (f for f in files if f.get("attachmentType") == "Agenda"),
-            next((f for f in files if f.get("path", "").lower().endswith(".pdf")), None)
+            next((f for f in files if (f.get("path") or "").lower().endswith(".pdf")), None)
         )
 
         if not agenda_file:

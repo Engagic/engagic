@@ -397,10 +397,10 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
     def _parse_drupal_table(self, html: str) -> List[Dict[str, Any]]:
         """Parse CivicPlus Drupal Views meeting table.
 
-        7-column table with consistent CSS classes on each td:
-          views-field-field-smart-date, views-field-title, views-field-nothing (agendas),
-          views-field-nothing-1 (packets), views-field-nothing-2 (minutes),
-          views-field-nothing-3 (video), views-field-view-node (details link)
+        Two schema variants seen in the wild (same column order, different field names):
+          DELREYOAKS-style: field-smart-date, title, nothing, nothing-1, nothing-2, nothing-3, view-node
+          ROLLWDTX-style:   field-calendar-date, title, field-agendas, field-packets-link,
+                            field-minutes, field-video-link, view-node
         """
         soup = BeautifulSoup(html, "html.parser")
         meetings: List[Dict[str, Any]] = []
@@ -408,6 +408,12 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         table = soup.find("table", class_="views-table")
         if not table:
             return []
+
+        def first(cell_map: Dict[str, Any], *keys: str) -> Any:
+            for k in keys:
+                if k in cell_map:
+                    return cell_map[k]
+            return None
 
         for row in table.find_all("tr"):
             cells = row.find_all("td")
@@ -422,7 +428,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                         cell_map[cls] = cell
                         break
 
-            date_cell = cell_map.get("views-field-field-smart-date")
+            date_cell = first(cell_map, "views-field-field-smart-date", "views-field-field-calendar-date")
             title_cell = cell_map.get("views-field-title")
             if not date_cell or not title_cell:
                 continue
@@ -431,8 +437,8 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
             parsed_date = self._parse_drupal_date(date_cell.get_text(strip=True))
 
             # Collect links from agenda and packet columns
-            agenda_cell = cell_map.get("views-field-nothing")
-            packet_cell = cell_map.get("views-field-nothing-1")
+            agenda_cell = first(cell_map, "views-field-nothing", "views-field-field-agendas")
+            packet_cell = first(cell_map, "views-field-nothing-1", "views-field-field-packets-link")
 
             meeting_guid = None
             agenda_url = None
@@ -492,17 +498,30 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
         return meetings
 
     def _parse_drupal_date(self, date_text: str) -> Optional[datetime]:
-        """Parse Drupal smart_date field: 'Mar 24, 2026 | 6pm' or 'Mar 18, 2026 | 2pm - 3pm'."""
+        """Parse Drupal Views date cell. Two known formats:
+          smart_date:    'Mar 24, 2026 | 6pm' or 'Mar 18, 2026 | 2pm - 3pm'   (separator '|')
+          calendar-date: '04/15/2026 - 7:00pm'                                (separator '-')
+        """
         if not date_text:
             return None
 
-        parts = date_text.split("|")
-        date_part = parts[0].strip()
-        time_part = parts[1].strip() if len(parts) > 1 else ""
+        # Split date and time. smart_date uses '|', calendar-date uses ' - '
+        # (but ' - ' also appears inside smart_date ranges, so try '|' first).
+        if "|" in date_text:
+            date_part, _, time_part = date_text.partition("|")
+        else:
+            date_part, _, time_part = date_text.partition(" - ")
+        date_part = date_part.strip()
+        time_part = time_part.strip()
 
-        try:
-            parsed = datetime.strptime(date_part, "%b %d, %Y")
-        except ValueError:
+        parsed: Optional[datetime] = None
+        for fmt in ("%b %d, %Y", "%m/%d/%Y"):
+            try:
+                parsed = datetime.strptime(date_part, fmt)
+                break
+            except ValueError:
+                continue
+        if parsed is None:
             return None
 
         if time_part:

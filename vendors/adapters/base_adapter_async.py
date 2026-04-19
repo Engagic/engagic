@@ -16,7 +16,7 @@ import aiohttp
 
 from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
-from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf
+from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf, _normalize_link_url
 from vendors.adapters.parsers.agenda_chunker_v2 import parse_agenda_pdf_v2
 from vendors.session_manager_async import AsyncSessionManager
 from exceptions import VendorHTTPError
@@ -572,7 +572,10 @@ class AsyncBaseAdapter:
                                 if link.get("kind") != 2:
                                     continue
                                 uri = link.get("uri", "")
-                                if not uri or uri in seen or uri == primary_url:
+                                if not uri:
+                                    continue
+                                uri = _normalize_link_url(uri)
+                                if uri in seen or uri == primary_url:
                                     continue
                                 if not any(p in uri.lower() for p in self._ATTACHMENT_URL_PATTERNS):
                                     continue

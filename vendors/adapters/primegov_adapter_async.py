@@ -214,7 +214,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
 
         if not meeting_status:
             for doc in meeting.get("documentList", []):
-                doc_name = doc.get("templateName", "").lower()
+                doc_name = (doc.get("templateName") or "").lower()
                 if "cancel" in doc_name or "recess" in doc_name:
                     meeting_status = "cancelled"
                     break

@@ -7,11 +7,12 @@ Handles CRUD operations for jurisdictions (cities, counties, utility boards, etc
 - Get last sync timestamp
 """
 
+import json
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from database.repositories_async.base import BaseRepository
-from database.repositories_async.helpers import deserialize_city_participation
+from database.repositories_async.helpers import deserialize_city_participation, deserialize_extra_vendors
 from database.models import Jurisdiction
 from config import get_logger
 
@@ -26,6 +27,7 @@ def _build_jurisdiction(row, zipcodes: List[str]) -> Jurisdiction:
         state=row["state"],
         vendor=row["vendor"],
         slug=row["slug"],
+        extra_vendors=deserialize_extra_vendors(row["extra_vendors"]),
         type=row["type"],
         county_banana=row["county_banana"],
         status=row["status"],
@@ -56,14 +58,15 @@ class JurisdictionRepository(BaseRepository):
         async with self.transaction() as conn:
             await conn.execute(
                 """
-                INSERT INTO jurisdictions (banana, name, state, vendor, slug, type, county_banana, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                INSERT INTO jurisdictions (banana, name, state, vendor, slug, extra_vendors, type, county_banana, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 city.banana,
                 city.name,
                 city.state,
                 city.vendor,
                 city.slug,
+                json.dumps(city.extra_vendors) if city.extra_vendors else None,
                 city.type,
                 city.county_banana,
                 city.status or "active",
@@ -92,13 +95,14 @@ class JurisdictionRepository(BaseRepository):
         async with self.transaction() as conn:
             await conn.execute(
                 """
-                INSERT INTO jurisdictions (banana, name, state, vendor, slug, type, county_banana, status, population)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                INSERT INTO jurisdictions (banana, name, state, vendor, slug, extra_vendors, type, county_banana, status, population)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (banana) DO UPDATE SET
                     name = EXCLUDED.name,
                     state = EXCLUDED.state,
                     vendor = EXCLUDED.vendor,
                     slug = EXCLUDED.slug,
+                    extra_vendors = COALESCE(EXCLUDED.extra_vendors, jurisdictions.extra_vendors),
                     type = COALESCE(EXCLUDED.type, jurisdictions.type),
                     county_banana = COALESCE(EXCLUDED.county_banana, jurisdictions.county_banana),
                     status = COALESCE(EXCLUDED.status, jurisdictions.status),
@@ -109,6 +113,7 @@ class JurisdictionRepository(BaseRepository):
                 city.state,
                 city.vendor,
                 city.slug,
+                json.dumps(city.extra_vendors) if city.extra_vendors else None,
                 city.type,
                 city.county_banana,
                 city.status or "active",
@@ -141,7 +146,7 @@ class JurisdictionRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT banana, name, state, vendor, slug, type, county_banana, status, participation
+                SELECT banana, name, state, vendor, slug, extra_vendors, type, county_banana, status, participation
                 FROM jurisdictions
                 WHERE banana = $1
                 """,
@@ -176,7 +181,7 @@ class JurisdictionRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.type, c.county_banana, c.status, c.participation
+                SELECT c.banana, c.name, c.state, c.vendor, c.slug, c.extra_vendors, c.type, c.county_banana, c.status, c.participation
                 FROM jurisdictions c
                 INNER JOIN zipcodes z ON c.banana = z.banana
                 WHERE z.zipcode = $1
@@ -213,7 +218,7 @@ class JurisdictionRepository(BaseRepository):
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT banana, name, state, vendor, slug, type, county_banana, status, participation
+                SELECT banana, name, state, vendor, slug, extra_vendors, type, county_banana, status, participation
                 FROM jurisdictions
                 WHERE status = $1
                 ORDER BY name
@@ -281,7 +286,7 @@ class JurisdictionRepository(BaseRepository):
             params.append(limit)
 
         query = f"""
-            SELECT banana, name, state, vendor, slug, type, county_banana, status, participation
+            SELECT banana, name, state, vendor, slug, extra_vendors, type, county_banana, status, participation
             FROM jurisdictions
             WHERE {where_clause}
             ORDER BY state, name

@@ -440,7 +440,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         ]
 
         for item in items:
-            title = item.get("title", "").lower()
+            title = (item.get("title") or "").lower()
             if any(frag in title for frag in PLACEHOLDER_FRAGMENTS):
                 return True
         return False

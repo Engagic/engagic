@@ -701,7 +701,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             async with semaphore:
                 html_atts = [
                     a for a in item.get("attachments", [])
-                    if a.get("type") == "html" and a.get("url", "").endswith("Documents.htm")
+                    if a.get("type") == "html" and (a.get("url") or "").endswith("Documents.htm")
                 ]
                 if not html_atts:
                     return item

@@ -567,8 +567,8 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
 
             votes = []
             for vote in raw_votes:
-                name = vote.get("VotePersonName", "").strip()
-                vote_value = vote.get("VoteValueName", "").strip()
+                name = (vote.get("VotePersonName") or "").strip()
+                vote_value = (vote.get("VoteValueName") or "").strip()
                 person_id = vote.get("VotePersonId")
                 sequence = vote.get("VoteSort", 0)
 

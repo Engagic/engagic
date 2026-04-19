@@ -48,6 +48,15 @@ def deserialize_agenda_sources(data: Any) -> Optional[List[Dict[str, str]]]:
     return data
 
 
+def deserialize_extra_vendors(data: Any) -> Optional[List[Dict[str, str]]]:
+    """Deserialize jurisdictions.extra_vendors JSONB to [{vendor, slug}]."""
+    if not data:
+        return None
+    if isinstance(data, str):
+        return json.loads(data)
+    return data
+
+
 async def fetch_topics_for_ids(
     conn,
     table: str,

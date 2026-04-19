@@ -39,8 +39,14 @@ CIVICWEB_CONFIG_FILE = "data/civicweb_sites.json"
 _DATE_DMY_RE = re.compile(r'(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})')
 _DATE_MDY_RE = re.compile(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(\d{4})')
 
-# Document URL on meeting pages: /document/{id}/{name}.pdf?handle={hash}
-_DOC_URL_RE = re.compile(r'/document/\d+/[^"\'>\s]+\.pdf\?handle=[^"\'>\s]+')
+# Document URL on meeting pages: /document/{id}/{name}.{ext}?handle={hash}
+# Most sites serve a native .pdf, but some (e.g. Bee Cave) upload .docx and
+# rely on the ?printPdf=true rendering endpoint. Capture the extension so we
+# can decide which URL form to feed the chunker.
+_DOC_URL_RE = re.compile(
+    r'/document/\d+/[^"\'>\s]+?\.(pdf|docx?|rtf)\?handle=[^"\'>\s]+',
+    re.IGNORECASE,
+)
 
 
 class AsyncCivicWebAdapter(AsyncBaseAdapter):
@@ -249,21 +255,37 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
             )
             return meeting
 
-        # Extract document URL: /document/{id}/{name}.pdf?handle={hash}
+        # Extract document URL: /document/{id}/{name}.{ext}?handle={hash}
         doc_match = _DOC_URL_RE.search(html)
         if doc_match:
-            pdf_url = urljoin(self.base_url, doc_match.group(0))
-            meeting["packet_url"] = pdf_url
+            original_url = urljoin(self.base_url, doc_match.group(0))
+            extension = doc_match.group(1).lower()
 
-            # CivicWeb stores agenda HTML at document_id + 1 relative to the
-            # packet PDF. The printPdf version is a proper PDF with hyperlinks
-            # to per-item staff report PDFs -- ideal for URL-based chunking.
-            # The packet PDF is a compiled 100-600 page document better suited
-            # for TOC-based parsing or monolithic processing.
-            doc_id_match = re.search(r'/document/(\d+)/', pdf_url)
-            if doc_id_match:
-                agenda_doc_id = int(doc_id_match.group(1)) + 1
-                meeting["_agenda_pdf_url"] = f"{self.base_url}/document/{agenda_doc_id}/?printPdf=true"
+            doc_id_match = re.search(r'/document/(\d+)/', original_url)
+            doc_id = doc_id_match.group(1) if doc_id_match else None
+
+            # Two origin flavours observed in the wild:
+            # (A) Native .pdf (e.g. Evanston): the handle URL is the full packet
+            #     (100-600pg compiled). Doc N+1 is a short agenda-HTML printout
+            #     with hyperlinks to per-item staff reports -- URL-parseable.
+            # (B) .docx origin (e.g. Bee Cave): the handle URL is an HTML
+            #     viewer wrapper, unusable directly. Doc N = short agenda when
+            #     rendered via ?printPdf=true, doc N+1 = rich packet with
+            #     sub-document bookmarks. TOC chunking the rich packet yields
+            #     real items; the short agenda has too little structure.
+            if extension == "pdf":
+                meeting["packet_url"] = original_url
+                if doc_id:
+                    agenda_doc_id = int(doc_id) + 1
+                    meeting["_agenda_pdf_url"] = f"{self.base_url}/document/{agenda_doc_id}/?printPdf=true"
+            elif doc_id:
+                # docx origin: doc N printPdf is the short URL-chunkable agenda
+                # (numbered items + hyperlinks to per-item /document/{uuid}
+                # attachments), doc N+1 printPdf is the compiled packet for
+                # TOC-based fallback.
+                packet_doc_id = int(doc_id) + 1
+                meeting["packet_url"] = f"{self.base_url}/document/{packet_doc_id}/?printPdf=true"
+                meeting["_agenda_pdf_url"] = f"{self.base_url}/document/{doc_id}/?printPdf=true"
 
         return meeting
 
