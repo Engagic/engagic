@@ -35,7 +35,7 @@ import type {
 	CivicInfrastructureResponse
 } from './types';
 import { ApiError, NetworkError } from './types';
-import { reverify } from '$lib/turnstile';
+import { reverify, waitForInit } from '$lib/turnstile';
 
 const inflightRequests = new Map<string, Promise<any>>();
 
@@ -81,6 +81,18 @@ async function fetchWithRetry(
 	retries: number = config.maxRetries,
 	requestHeaders?: Record<string, string>
 ): Promise<Response> {
+	// Client-side: wait for initial Turnstile verification to settle before
+	// the first gated request. Capped at 3s so a broken widget doesn't hang
+	// the UI; on timeout we fall through and let the retry-on-403 path run.
+	// Server-side calls pass requestHeaders and bypass this gate (they rely on
+	// X-SSR-Auth, not the browser's session token).
+	if (typeof window !== 'undefined' && !requestHeaders) {
+		await Promise.race([
+			waitForInit(),
+			new Promise<void>((r) => setTimeout(r, 3000)),
+		]);
+	}
+
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), config.requestTimeout);
 
