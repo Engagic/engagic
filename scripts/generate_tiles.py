@@ -254,32 +254,45 @@ def upload_r2() -> None:
         logger.error("pmtiles not found, run --tiles first")
         return
 
-    # Load token from .llm_secrets if not already in environment
-    token = os.environ.get("CLOUDFLARE_API_TOKEN")
-    if not token:
-        secrets_path = Path("/opt/engagic/.llm_secrets")
-        if secrets_path.exists():
-            for line in secrets_path.read_text().splitlines():
-                if line.startswith("CLOUDFLARE_API_TOKEN="):
-                    token = line.split("=", 1)[1]
-                    break
-    if not token:
+    # Load credentials from .llm_secrets if not already in environment.
+    # CLOUDFLARE_ACCOUNT_ID skips wrangler's /memberships lookup, which requires
+    # User:Read scope the R2-only token doesn't have.
+    cf_vars: dict[str, str | None] = {
+        "CLOUDFLARE_API_TOKEN": os.environ.get("CLOUDFLARE_API_TOKEN"),
+        "CLOUDFLARE_ACCOUNT_ID": os.environ.get("CLOUDFLARE_ACCOUNT_ID"),
+    }
+
+    secrets_path = Path("/opt/engagic/.llm_secrets")
+    if secrets_path.exists():
+        for line in secrets_path.read_text().splitlines():
+            for key in cf_vars:
+                if not cf_vars[key] and line.startswith(f"{key}="):
+                    cf_vars[key] = line.split("=", 1)[1].strip()
+
+    if not cf_vars["CLOUDFLARE_API_TOKEN"]:
         logger.error("CLOUDFLARE_API_TOKEN not found in environment or .llm_secrets")
         print("Error: set CLOUDFLARE_API_TOKEN or add it to .llm_secrets")
         return
+    if not cf_vars["CLOUDFLARE_ACCOUNT_ID"]:
+        logger.error("CLOUDFLARE_ACCOUNT_ID not found -- wrangler will fail on /memberships lookup")
+        print("Error: set CLOUDFLARE_ACCOUNT_ID in .llm_secrets")
+        return
 
-    env = {**os.environ, "CLOUDFLARE_API_TOKEN": token}
+    env = {**os.environ, **{k: v for k, v in cf_vars.items() if v}}
 
     size_mb = PMTILES_PATH.stat().st_size / (1024 * 1024)
     logger.info("uploading to R2", file=str(PMTILES_PATH), size_mb=f"{size_mb:.1f}")
     print(f"\nUploading {size_mb:.1f} MB to R2 bucket engagic-tiles...")
 
+    # --remote is REQUIRED on wrangler v4+; without it, the object goes into
+    # local simulated R2 state and never reaches production.
     result = subprocess.run(
         [
             "npx", "wrangler", "r2", "object", "put",
             "engagic-tiles/cities.pmtiles",
             f"--file={PMTILES_PATH}",
             "--content-type=application/octet-stream",
+            "--remote",
         ],
         capture_output=True,
         text=True,
