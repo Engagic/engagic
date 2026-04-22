@@ -41,21 +41,74 @@ async def export_geojson() -> None:
     dsn = config.get_postgres_dsn()
     conn = await asyncpg.connect(dsn)
 
+    # Coverage taxonomy (mirrors /api/city-coverage in server/routes/monitoring.py):
+    #   matter     - city_matters.canonical_summary (deepest, post-2026-04-11 refactor)
+    #   item       - items.summary for items NOT rolled up to a canonical matter summary
+    #   monolithic - legacy meetings.summary (whole-meeting summaries)
+    #   synced     - meetings exist but nothing summarized yet
+    #   pending    - jurisdiction has geometry but no meetings
     try:
-        # Get meeting stats for each city
         stats_rows = await conn.fetch("""
+            WITH
+                matter_counts AS (
+                    SELECT banana, COUNT(*) AS cnt
+                    FROM city_matters
+                    WHERE canonical_summary IS NOT NULL AND canonical_summary != ''
+                    GROUP BY banana
+                ),
+                item_counts AS (
+                    SELECT m.banana, COUNT(*) AS cnt
+                    FROM items i
+                    JOIN meetings m ON i.meeting_id = m.id
+                    WHERE i.summary IS NOT NULL AND i.summary != ''
+                      AND (i.matter_id IS NULL OR i.matter_id NOT IN (
+                          SELECT id FROM city_matters
+                          WHERE canonical_summary IS NOT NULL AND canonical_summary != ''
+                      ))
+                    GROUP BY m.banana
+                ),
+                meeting_counts AS (
+                    SELECT banana, COUNT(*) AS cnt
+                    FROM meetings
+                    WHERE summary IS NOT NULL AND summary != ''
+                    GROUP BY banana
+                ),
+                synced_counts AS (
+                    SELECT banana, COUNT(*) AS cnt
+                    FROM meetings
+                    WHERE title IS NOT NULL AND title != ''
+                      AND date IS NOT NULL
+                    GROUP BY banana
+                )
             SELECT
-                banana,
-                COUNT(*) as meeting_count,
-                COUNT(*) FILTER (WHERE summary IS NOT NULL) as summarized_count
-            FROM meetings
-            GROUP BY banana
+                c.banana,
+                CASE
+                    WHEN COALESCE(mc.cnt, 0) > 0 THEN 'matter'
+                    WHEN COALESCE(ic.cnt, 0) > 0 THEN 'item'
+                    WHEN COALESCE(mtg.cnt, 0) > 0 THEN 'monolithic'
+                    WHEN COALESCE(sc.cnt, 0) > 0 THEN 'synced'
+                    ELSE 'pending'
+                END AS coverage_type,
+                CASE
+                    WHEN COALESCE(mc.cnt, 0) > 0 THEN mc.cnt + COALESCE(ic.cnt, 0)
+                    WHEN COALESCE(ic.cnt, 0) > 0 THEN ic.cnt
+                    WHEN COALESCE(mtg.cnt, 0) > 0 THEN mtg.cnt
+                    WHEN COALESCE(sc.cnt, 0) > 0 THEN sc.cnt
+                    ELSE 0
+                END AS summary_count
+            FROM jurisdictions c
+            LEFT JOIN matter_counts mc ON c.banana = mc.banana
+            LEFT JOIN item_counts ic ON c.banana = ic.banana
+            LEFT JOIN meeting_counts mtg ON c.banana = mtg.banana
+            LEFT JOIN synced_counts sc ON c.banana = sc.banana
+            WHERE c.geom IS NOT NULL
         """)
-        meeting_stats = {row["banana"]: dict(row) for row in stats_rows}
+        coverage = {
+            row["banana"]: {"coverage_type": row["coverage_type"], "summary_count": row["summary_count"]}
+            for row in stats_rows
+        }
 
-        # Count cities with geometry
-        count = await conn.fetchval("SELECT COUNT(*) FROM jurisdictions WHERE geom IS NOT NULL")
-        logger.info("exporting cities via ogr2ogr", count=count)
+        logger.info("exporting cities via ogr2ogr", count=len(coverage))
 
     finally:
         await conn.close()
@@ -96,19 +149,15 @@ async def export_geojson() -> None:
         print(f"Error: {result.stderr}")
         return
 
-    # Post-process to add meeting stats
+    # Post-process: bake coverage_type + summary_count into each feature
     with open(GEOJSON_PATH) as f:
         geojson = json.load(f)
 
     for feature in geojson["features"]:
         props = feature["properties"]
-        banana = props["banana"]
-        stats = meeting_stats.get(banana, {"meeting_count": 0, "summarized_count": 0})
-
-        props["meeting_count"] = stats.get("meeting_count", 0)
-        props["summarized_count"] = stats.get("summarized_count", 0)
-        props["has_data"] = props["meeting_count"] > 0
-        props["has_summaries"] = props["summarized_count"] > 0
+        row = coverage.get(props["banana"], {"coverage_type": "pending", "summary_count": 0})
+        props["coverage_type"] = row["coverage_type"]
+        props["summary_count"] = row["summary_count"]
 
     geojson["generated_at"] = datetime.now(tz=None).isoformat() + "Z"
 
@@ -117,21 +166,23 @@ async def export_geojson() -> None:
 
     logger.info("geojson exported", path=str(GEOJSON_PATH), features=len(geojson["features"]))
 
-    # Summary stats
-    with_data = sum(1 for f in geojson["features"] if f["properties"]["has_data"])
-    with_summaries = sum(1 for f in geojson["features"] if f["properties"]["has_summaries"])
+    # Summary stats by tier
+    tier_counts: dict[str, int] = {}
+    for f in geojson["features"]:
+        t = f["properties"]["coverage_type"]
+        tier_counts[t] = tier_counts.get(t, 0) + 1
     total_pop = sum(f["properties"].get("population") or 0 for f in geojson["features"])
-    pop_with_data = sum(
+    pop_covered = sum(
         f["properties"].get("population") or 0
         for f in geojson["features"]
-        if f["properties"]["has_data"]
+        if f["properties"]["coverage_type"] != "pending"
     )
     print("\nExport Summary:")
     print(f"  Total cities with geometry: {len(geojson['features'])}")
-    print(f"  Cities with meeting data: {with_data}")
-    print(f"  Cities with summaries: {with_summaries}")
+    for tier in ("matter", "item", "monolithic", "synced", "pending"):
+        print(f"  {tier}: {tier_counts.get(tier, 0)}")
     print(f"  Total population: {total_pop:,}")
-    print(f"  Population with data: {pop_with_data:,}")
+    print(f"  Population with data: {pop_covered:,}")
 
 
 def generate_pmtiles() -> None:

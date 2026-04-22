@@ -11,34 +11,68 @@
 
 	let { tilesUrl = '/tiles/cities.pmtiles' }: Props = $props();
 
+	type CoverageType = 'matter' | 'item' | 'monolithic' | 'synced' | 'pending';
+
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = $state(null);
-	let hoveredCity: { name: string; state: string; meeting_count: number; summarized_count: number } | null = $state(null);
-	let cityStats: Record<string, { m: number; s: number }> = {};
+	let hoveredCity: { name: string; state: string; coverage_type: CoverageType; summary_count: number } | null = $state(null);
+	let cityStats: Record<string, { t: CoverageType; c: number }> = {};
 
-	// Theme color palettes - MapLibre requires actual hex values, not CSS vars
+	const coverageLabels: Record<CoverageType, string> = {
+		matter: 'Matter-level summaries',
+		item: 'Item-level summaries',
+		monolithic: 'Meeting-level summaries',
+		synced: 'Meetings synced',
+		pending: 'No data yet'
+	};
+
+	// Theme color palettes - MapLibre requires actual hex values, not CSS vars.
+	// Five-tier coverage palette: deep green (richest) -> gray (pending).
 	const themes = {
 		light: {
 			background: '#faf9f5',
-			inactive: '#e4e2da',
-			inactiveOutline: '#8a897e',
-			active: '#b5642a',
-			summarized: '#3d8b55',
-			hover: '#c87a3f',
 			stateBorder: '#d5d0c6',
-			countryFill: '#f3f1ea'
+			countryFill: '#f3f1ea',
+			hover: '#c87a3f',
+			outline: '#8a897e',
+			tiers: {
+				matter: '#3d8b55',
+				item: '#7ab368',
+				monolithic: '#b5642a',
+				synced: '#d4a574',
+				pending: '#e4e2da'
+			} as Record<CoverageType, string>
 		},
 		dark: {
 			background: '#1a1918',
-			inactive: '#302e2b',
-			inactiveOutline: '#6b6860',
-			active: '#d4874d',
-			summarized: '#6aad5e',
-			hover: '#e09258',
 			stateBorder: '#3d3a36',
-			countryFill: '#141312'
+			countryFill: '#141312',
+			hover: '#e09258',
+			outline: '#6b6860',
+			tiers: {
+				matter: '#6aad5e',
+				item: '#8fc47e',
+				monolithic: '#d4874d',
+				synced: '#b38c6a',
+				pending: '#302e2b'
+			} as Record<CoverageType, string>
 		}
 	};
+
+	// Paint expression: coverage_type -> fill color, feature-state takes precedence
+	// over tile-baked value so post-regen tier changes show up live.
+	function fillColorExpr(tiers: Record<CoverageType, string>): maplibregl.ExpressionSpecification {
+		return [
+			'match',
+			['coalesce', ['feature-state', 'coverage_type'], ['get', 'coverage_type'], 'pending'],
+			'matter', tiers.matter,
+			'item', tiers.item,
+			'monolithic', tiers.monolithic,
+			'synced', tiers.synced,
+			'pending', tiers.pending,
+			tiers.pending
+		] as maplibregl.ExpressionSpecification;
+	}
 
 	function getTheme(): 'light' | 'dark' {
 		if (typeof document === 'undefined') return 'light';
@@ -91,49 +125,29 @@
 					}
 				},
 				{
-					id: 'city-fill-inactive',
+					id: 'city-fill',
 					type: 'fill',
 					source: 'cities',
 					'source-layer': 'cities',
-					filter: ['==', ['get', 'has_data'], false],
 					paint: {
-						'fill-color': colors.inactive,
-						'fill-opacity': 0.4
-					}
-				},
-				{
-					id: 'city-fill-active',
-					type: 'fill',
-					source: 'cities',
-					'source-layer': 'cities',
-					filter: ['==', ['get', 'has_data'], true],
-					paint: {
-						'fill-color': colors.active,
+						'fill-color': fillColorExpr(colors.tiers),
+						// Opacity grows with the depth of coverage, with a small
+						// boost from summary_count so heavily-covered cities pop.
 						'fill-opacity': [
 							'interpolate',
 							['linear'],
-							['coalesce', ['feature-state', 'meeting_count'], ['get', 'meeting_count'], 0],
-							0, 0.3,
-							50, 0.5,
-							200, 0.7
-						]
-					}
-				},
-				{
-					id: 'city-fill-summarized',
-					type: 'fill',
-					source: 'cities',
-					'source-layer': 'cities',
-					filter: ['==', ['get', 'has_summaries'], true],
-					paint: {
-						'fill-color': colors.summarized,
-						'fill-opacity': [
-							'interpolate',
-							['linear'],
-							['coalesce', ['feature-state', 'summarized_count'], ['get', 'summarized_count'], 0],
-							0, 0.4,
-							20, 0.6,
-							100, 0.8
+							['coalesce', ['feature-state', 'summary_count'], ['get', 'summary_count'], 0],
+							0, [
+								'match',
+								['coalesce', ['feature-state', 'coverage_type'], ['get', 'coverage_type'], 'pending'],
+								'matter', 0.5,
+								'item', 0.45,
+								'monolithic', 0.4,
+								'synced', 0.35,
+								0.35
+							],
+							50, 0.7,
+							200, 0.85
 						]
 					}
 				},
@@ -143,14 +157,7 @@
 					source: 'cities',
 					'source-layer': 'cities',
 					paint: {
-						'line-color': [
-							'case',
-							['coalesce', ['feature-state', 'has_summaries'], ['get', 'has_summaries'], false],
-							colors.summarized,
-							['coalesce', ['feature-state', 'has_data'], ['get', 'has_data'], false],
-							colors.active,
-							colors.inactiveOutline
-						],
+						'line-color': colors.outline,
 						'line-width': [
 							'interpolate',
 							['linear'],
@@ -159,7 +166,7 @@
 							8, 1,
 							12, 2
 						],
-						'line-opacity': 0.6
+						'line-opacity': 0.4
 					}
 				},
 				{
@@ -182,18 +189,9 @@
 		mapInstance.setPaintProperty('background', 'background-color', colors.countryFill);
 		mapInstance.setPaintProperty('states-fill', 'fill-color', colors.background);
 		mapInstance.setPaintProperty('state-borders', 'line-color', colors.stateBorder);
-		mapInstance.setPaintProperty('city-fill-inactive', 'fill-color', colors.inactive);
-		mapInstance.setPaintProperty('city-fill-active', 'fill-color', colors.active);
-		mapInstance.setPaintProperty('city-fill-summarized', 'fill-color', colors.summarized);
+		mapInstance.setPaintProperty('city-fill', 'fill-color', fillColorExpr(colors.tiers));
+		mapInstance.setPaintProperty('city-outline', 'line-color', colors.outline);
 		mapInstance.setPaintProperty('city-hover', 'fill-color', colors.hover);
-		mapInstance.setPaintProperty('city-outline', 'line-color', [
-			'case',
-			['coalesce', ['feature-state', 'has_summaries'], ['get', 'has_summaries'], false],
-			colors.summarized,
-			['coalesce', ['feature-state', 'has_data'], ['get', 'has_data'], false],
-			colors.active,
-			colors.inactiveOutline
-		]);
 	}
 
 	// Map initialization effect
@@ -222,22 +220,19 @@
 		// Navigation controls
 		mapInstance.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-		// Fetch live stats and overlay via feature-state
+		// Fetch live stats and overlay via feature-state. Paint reads feature-state
+		// preferentially, so a city whose tier advanced since the last tile regen
+		// repaints immediately without waiting for a fresh PMTiles build.
 		mapInstance.on('load', async () => {
 			try {
 				const res = await fetch(`${config.apiBaseUrl}/api/map-stats`);
 				if (!res.ok) return;
-				const stats: Record<string, { m: number; s: number }> = await res.json();
+				const stats: Record<string, { t: CoverageType; c: number }> = await res.json();
 				cityStats = stats;
 				for (const [banana, s] of Object.entries(stats)) {
 					mapInstance.setFeatureState(
 						{ source: 'cities', sourceLayer: 'cities', id: banana },
-						{
-							meeting_count: s.m,
-							summarized_count: s.s,
-							has_data: s.m > 0,
-							has_summaries: s.s > 0
-						}
+						{ coverage_type: s.t, summary_count: s.c }
 					);
 				}
 			} catch {
@@ -245,52 +240,37 @@
 			}
 		});
 
-		// Click to navigate to city page
-		mapInstance.on('click', 'city-fill-active', (e) => {
-			if (e.features && e.features[0]) {
-				const banana = e.features[0].properties?.banana;
-				if (banana) {
-					goto(`/${banana}`);
-				}
+		// Click to navigate to city page (pending cities are non-interactive)
+		mapInstance.on('click', 'city-fill', (e) => {
+			const feat = e.features?.[0];
+			if (!feat) return;
+			const banana = feat.properties?.banana;
+			const live = cityStats[banana];
+			const tier = live?.t ?? feat.properties?.coverage_type ?? 'pending';
+			if (banana && tier !== 'pending') {
+				goto(`/${banana}`);
 			}
 		});
 
-		mapInstance.on('click', 'city-fill-summarized', (e) => {
-			if (e.features && e.features[0]) {
-				const banana = e.features[0].properties?.banana;
-				if (banana) {
-					goto(`/${banana}`);
-				}
-			}
-		});
-
-		// Hover effects
 		function handleHover(e: maplibregl.MapMouseEvent & { features?: maplibregl.GeoJSONFeature[] }) {
-			mapInstance.getCanvas().style.cursor = 'pointer';
-			if (e.features && e.features[0]) {
-				const props = e.features[0].properties;
-				const banana = props?.banana || '';
-				const live = cityStats[banana];
-				hoveredCity = {
-					name: props?.name || 'Unknown',
-					state: props?.state || '',
-					meeting_count: live?.m ?? props?.meeting_count ?? 0,
-					summarized_count: live?.s ?? props?.summarized_count ?? 0
-				};
-				mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], banana]);
-			}
+			const feat = e.features?.[0];
+			if (!feat) return;
+			const props = feat.properties ?? {};
+			const banana = props.banana || '';
+			const live = cityStats[banana];
+			const tier = (live?.t ?? props.coverage_type ?? 'pending') as CoverageType;
+			mapInstance.getCanvas().style.cursor = tier === 'pending' ? '' : 'pointer';
+			hoveredCity = {
+				name: props.name || 'Unknown',
+				state: props.state || '',
+				coverage_type: tier,
+				summary_count: live?.c ?? props.summary_count ?? 0
+			};
+			mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], banana]);
 		}
 
-		mapInstance.on('mouseenter', 'city-fill-active', handleHover);
-		mapInstance.on('mouseenter', 'city-fill-summarized', handleHover);
-
-		mapInstance.on('mouseleave', 'city-fill-active', () => {
-			mapInstance.getCanvas().style.cursor = '';
-			hoveredCity = null;
-			mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], '']);
-		});
-
-		mapInstance.on('mouseleave', 'city-fill-summarized', () => {
+		mapInstance.on('mousemove', 'city-fill', handleHover);
+		mapInstance.on('mouseleave', 'city-fill', () => {
 			mapInstance.getCanvas().style.cursor = '';
 			hoveredCity = null;
 			mapInstance.setFilter('city-hover', ['==', ['get', 'banana'], '']);
@@ -329,7 +309,7 @@
 		<div class="tooltip">
 			<div class="tooltip-city">{hoveredCity.name}, {hoveredCity.state}</div>
 			<div class="tooltip-stats">
-				{hoveredCity.meeting_count} meetings{#if hoveredCity.summarized_count > 0} / {hoveredCity.summarized_count} summarized{/if}
+				{coverageLabels[hoveredCity.coverage_type]}{#if hoveredCity.summary_count > 0} &middot; {hoveredCity.summary_count.toLocaleString()}{/if}
 			</div>
 		</div>
 	{/if}
@@ -337,16 +317,24 @@
 	<div class="legend">
 		<div class="legend-title">Coverage</div>
 		<div class="legend-item">
-			<span class="legend-swatch legend-summarized"></span>
-			<span>With AI summaries</span>
+			<span class="legend-swatch tier-matter"></span>
+			<span>Matter-level</span>
 		</div>
 		<div class="legend-item">
-			<span class="legend-swatch legend-active"></span>
-			<span>Meeting data</span>
+			<span class="legend-swatch tier-item"></span>
+			<span>Item-level</span>
 		</div>
 		<div class="legend-item">
-			<span class="legend-swatch legend-inactive"></span>
-			<span>Boundary only</span>
+			<span class="legend-swatch tier-monolithic"></span>
+			<span>Meeting-level</span>
+		</div>
+		<div class="legend-item">
+			<span class="legend-swatch tier-synced"></span>
+			<span>Synced</span>
+		</div>
+		<div class="legend-item">
+			<span class="legend-swatch tier-pending"></span>
+			<span>Pending</span>
 		</div>
 	</div>
 </div>
@@ -432,20 +420,16 @@
 		border-radius: 2px;
 	}
 
-	.legend-summarized {
-		background: var(--civic-green);
-		opacity: 0.7;
-	}
+	.tier-matter { background: #3d8b55; opacity: 0.85; }
+	.tier-item { background: #7ab368; opacity: 0.8; }
+	.tier-monolithic { background: #b5642a; opacity: 0.75; }
+	.tier-synced { background: #d4a574; opacity: 0.7; }
+	.tier-pending { background: var(--border-primary); opacity: 0.5; }
 
-	.legend-active {
-		background: var(--civic-blue);
-		opacity: 0.5;
-	}
-
-	.legend-inactive {
-		background: var(--border-primary);
-		opacity: 0.4;
-	}
+	:global(.dark) .tier-matter { background: #6aad5e; }
+	:global(.dark) .tier-item { background: #8fc47e; }
+	:global(.dark) .tier-monolithic { background: #d4874d; }
+	:global(.dark) .tier-synced { background: #b38c6a; }
 
 	/* MapLibre overrides for dark mode */
 	:global(.maplibregl-ctrl-group) {

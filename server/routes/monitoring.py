@@ -96,20 +96,75 @@ async def root():
 
 @router.get("/api/map-stats")
 async def get_map_stats(db: Database = Depends(get_db)):
-    """Compact per-city meeting stats for map feature-state overlay."""
+    """Compact per-city coverage tier for map feature-state overlay.
+
+    Returns {banana: {t: coverage_type, c: summary_count}} so the map can paint
+    cities whose tier advanced since the last tile regen. Mirrors /api/city-coverage.
+    """
     try:
         async with db.pool.acquire() as conn:
             rows = await conn.fetch("""
+                WITH
+                    matter_counts AS (
+                        SELECT banana, COUNT(*) AS cnt
+                        FROM city_matters
+                        WHERE canonical_summary IS NOT NULL AND canonical_summary != ''
+                        GROUP BY banana
+                    ),
+                    item_counts AS (
+                        SELECT m.banana, COUNT(*) AS cnt
+                        FROM items i
+                        JOIN meetings m ON i.meeting_id = m.id
+                        WHERE i.summary IS NOT NULL AND i.summary != ''
+                          AND (i.matter_id IS NULL OR i.matter_id NOT IN (
+                              SELECT id FROM city_matters
+                              WHERE canonical_summary IS NOT NULL AND canonical_summary != ''
+                          ))
+                        GROUP BY m.banana
+                    ),
+                    meeting_counts AS (
+                        SELECT banana, COUNT(*) AS cnt
+                        FROM meetings
+                        WHERE summary IS NOT NULL AND summary != ''
+                        GROUP BY banana
+                    ),
+                    synced_counts AS (
+                        SELECT banana, COUNT(*) AS cnt
+                        FROM meetings
+                        WHERE title IS NOT NULL AND title != ''
+                          AND date IS NOT NULL
+                        GROUP BY banana
+                    )
                 SELECT
-                    banana,
-                    COUNT(*) as meeting_count,
-                    COUNT(*) FILTER (WHERE summary IS NOT NULL) as summarized_count
-                FROM meetings
-                GROUP BY banana
+                    c.banana,
+                    CASE
+                        WHEN COALESCE(mc.cnt, 0) > 0 THEN 'matter'
+                        WHEN COALESCE(ic.cnt, 0) > 0 THEN 'item'
+                        WHEN COALESCE(mtg.cnt, 0) > 0 THEN 'monolithic'
+                        WHEN COALESCE(sc.cnt, 0) > 0 THEN 'synced'
+                        ELSE 'pending'
+                    END AS coverage_type,
+                    CASE
+                        WHEN COALESCE(mc.cnt, 0) > 0 THEN mc.cnt + COALESCE(ic.cnt, 0)
+                        WHEN COALESCE(ic.cnt, 0) > 0 THEN ic.cnt
+                        WHEN COALESCE(mtg.cnt, 0) > 0 THEN mtg.cnt
+                        WHEN COALESCE(sc.cnt, 0) > 0 THEN sc.cnt
+                        ELSE 0
+                    END AS summary_count
+                FROM jurisdictions c
+                LEFT JOIN matter_counts mc ON c.banana = mc.banana
+                LEFT JOIN item_counts ic ON c.banana = ic.banana
+                LEFT JOIN meeting_counts mtg ON c.banana = mtg.banana
+                LEFT JOIN synced_counts sc ON c.banana = sc.banana
+                WHERE c.geom IS NOT NULL
+                  AND NOT (COALESCE(mc.cnt, 0) = 0
+                           AND COALESCE(ic.cnt, 0) = 0
+                           AND COALESCE(mtg.cnt, 0) = 0
+                           AND COALESCE(sc.cnt, 0) = 0)
             """)
 
         stats = {
-            row["banana"]: {"m": row["meeting_count"], "s": row["summarized_count"]}
+            row["banana"]: {"t": row["coverage_type"], "c": row["summary_count"]}
             for row in rows
         }
 
