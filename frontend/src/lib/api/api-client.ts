@@ -68,9 +68,13 @@ export function buildRequestHeaders(context?: RequestContext): Record<string, st
 		// Forward as CF-Connecting-IP so nginx real_ip module and rate limiting
 		// see the actual client IP, not the Cloudflare Worker edge IP
 		headers['CF-Connecting-IP'] = context.clientIp;
-		if (context.ssrAuthSecret) {
-			headers['X-SSR-Auth'] = context.ssrAuthSecret;
-		}
+	}
+	// X-SSR-Auth is independent of clientIp: nested under it meant SSR calls
+	// whose locals lacked cf-connecting-ip (e.g. local dev, odd edge cases)
+	// silently dropped the auth header, got classified [scraper], and hit the
+	// turnstile gate instead of being waved through as [ssr].
+	if (context?.ssrAuthSecret) {
+		headers['X-SSR-Auth'] = context.ssrAuthSecret;
 	}
 	return headers;
 }
