@@ -448,24 +448,23 @@ daemon_status() {
     uv run engagic-daemon --status
 }
 
-sync_cities() {
+sync() {
     if [ -z "$1" ]; then
-        error "Cities required (comma-separated bananas or @file path)"
+        error "Targets required (comma-separated bananas, state codes, or @file path)"
     fi
 
-    log "Syncing cities: $1"
+    log "Syncing: $1"
     load_env
-    uv run engagic-conductor sync-cities "$1"
+    uv run engagic-conductor sync "$1"
 }
 
-process_cities() {
+process() {
     if [ -z "$1" ]; then
-        error "Cities required (comma-separated bananas or @file path)"
+        error "Targets required (comma-separated bananas, state codes, or @file path)"
     fi
 
     local SCREEN_NAME="engagic-process"
 
-    # Check if already running
     if screen -list | grep -q "$SCREEN_NAME"; then
         warn "Process session already running!"
         echo "  Attach with: $0 attach"
@@ -473,8 +472,8 @@ process_cities() {
         return 1
     fi
 
-    log "Starting process-cities in detachable screen session..."
-    log "Cities: $1"
+    log "Starting process in detachable screen session..."
+    log "Targets: $1"
     echo ""
     info "Commands:"
     echo "  Ctrl-A D     - Detach (process keeps running)"
@@ -483,25 +482,22 @@ process_cities() {
     echo ""
     sleep 2
 
-    # Load env vars into a file for screen to source
     load_env
 
-    # Start in screen session and immediately attach
     screen -dmS "$SCREEN_NAME" bash -c "
         cd $APP_DIR
         source $VENV_DIR/bin/activate
         if [ -f $APP_DIR/.env ]; then set -a; source $APP_DIR/.env; set +a; fi
         if [ -f $APP_DIR/.llm_secrets ]; then set -a; source $APP_DIR/.llm_secrets; set +a; fi
         export ENGAGIC_LOG_FORMAT=dev
-        echo 'Starting process-cities...'
+        echo 'Starting process...'
         echo ''
-        uv run engagic-conductor process-cities '$1'
+        uv run engagic-conductor process '$1'
         echo ''
         echo 'Processing complete. Press Enter to close.'
         read
     "
 
-    # Attach immediately so user sees output
     screen -r "$SCREEN_NAME"
 }
 
@@ -512,7 +508,7 @@ attach_process() {
         screen -r "$SCREEN_NAME"
     else
         warn "No process session running"
-        echo "Start one with: $0 process-cities @regions/file.txt"
+        echo "Start one with: $0 process @regions/file.txt"
     fi
 }
 
@@ -521,85 +517,21 @@ kill_process() {
     if screen -list | grep -q "$SCREEN_NAME"; then
         warn "Killing process session..."
         screen -S "$SCREEN_NAME" -X quit
-        # Also kill any orphaned conductor processes
-        pkill -f "engagic-conductor process-cities" 2>/dev/null || true
+        pkill -f "engagic-conductor process" 2>/dev/null || true
         log "Process session terminated"
     else
         info "No process session running"
     fi
 }
 
-sync_and_process_cities() {
+sync_and_process() {
     if [ -z "$1" ]; then
-        error "Cities required (comma-separated bananas or @file path)"
+        error "Targets required (comma-separated bananas, state codes, or @file path)"
     fi
 
-    log "Syncing and processing cities: $1"
+    log "Syncing and processing: $1"
     load_env
-    uv run engagic-conductor sync-and-process-cities "$1"
-}
-
-sync_county() {
-    if [ -z "$1" ]; then
-        error "County banana required (e.g. montereycountyCA)"
-    fi
-
-    log "Syncing county: $1 (auto-expands to all linked cities)"
-    load_env
-    uv run engagic-conductor sync-cities "$1"
-}
-
-process_county() {
-    if [ -z "$1" ]; then
-        error "County banana required (e.g. montereycountyCA)"
-    fi
-
-    local SCREEN_NAME="engagic-process"
-
-    if screen -list | grep -q "$SCREEN_NAME"; then
-        warn "Process session already running!"
-        echo "  Attach with: $0 attach"
-        echo "  Or kill it:  $0 kill-process"
-        return 1
-    fi
-
-    log "Starting process-county in detachable screen session..."
-    log "County: $1 (auto-expands to all linked cities)"
-    echo ""
-    info "Commands:"
-    echo "  Ctrl-A D     - Detach (process keeps running)"
-    echo "  $0 attach    - Reattach to view logs"
-    echo "  $0 kill-process - Stop processing"
-    echo ""
-    sleep 2
-
-    load_env
-
-    screen -dmS "$SCREEN_NAME" bash -c "
-        cd $APP_DIR
-        source $VENV_DIR/bin/activate
-        if [ -f $APP_DIR/.env ]; then set -a; source $APP_DIR/.env; set +a; fi
-        if [ -f $APP_DIR/.llm_secrets ]; then set -a; source $APP_DIR/.llm_secrets; set +a; fi
-        export ENGAGIC_LOG_FORMAT=dev
-        echo 'Starting process-county (auto-expanding to linked cities)...'
-        echo ''
-        uv run engagic-conductor process-cities '$1'
-        echo ''
-        echo 'Processing complete. Press Enter to close.'
-        read
-    "
-
-    screen -r "$SCREEN_NAME"
-}
-
-sync_and_process_county() {
-    if [ -z "$1" ]; then
-        error "County banana required (e.g. montereycountyCA)"
-    fi
-
-    log "Syncing and processing county: $1 (auto-expands to all linked cities)"
-    load_env
-    uv run engagic-conductor sync-and-process-cities "$1"
+    uv run engagic-conductor sync-and-process "$1"
 }
 
 process_unprocessed() {
@@ -863,7 +795,7 @@ show_help() {
     echo "  update                    - Quick update (git pull + restart)"
     echo "  deploy                    - Full deployment"
     echo "  test                      - Test API endpoints"
-    echo "  sync                      - Sync dependencies"
+    echo "  sync-deps                 - Sync Python dependencies (uv sync)"
     echo ""
     echo "Prometheus:"
     echo "  start-prometheus, stop-prometheus, restart-prometheus"
@@ -881,15 +813,14 @@ show_help() {
     echo "  map-all                   - Full map pipeline"
     echo ""
     echo "Data Operations:"
-    echo "    sync-cities CITIES             - Fetch meetings (single city or comma-separated or @file)"
-    echo "    process-cities CITIES          - Process in screen (survives SSH disconnect)"
-    echo "    sync-and-process-cities CITIES - Fetch + process cities"
-    echo "    sync-county COUNTY             - Fetch county + all linked cities (e.g. montereycountyCA)"
-    echo "    process-county COUNTY          - Process county + linked cities in screen"
-    echo "    sync-and-process-county COUNTY - Fetch + process county + linked cities"
-    echo "    attach                         - Reattach to running process-cities"
-    echo "    kill-process                   - Stop running process-cities"
-    echo "    process-unprocessed            - Process all unprocessed meetings in queue"
+    echo "    sync TARGETS              - Fetch meetings. TARGETS is one or more of:"
+    echo "                                  city banana (paloaltoCA), county banana (montereycountyCA),"
+    echo "                                  state code (GA), or @file path. Comma-separated."
+    echo "    process TARGETS           - Process in screen (survives SSH disconnect). Same TARGETS as sync."
+    echo "    sync-and-process TARGETS  - Fetch + process. Same TARGETS as sync."
+    echo "    attach                    - Reattach to running process session"
+    echo "    kill-process              - Stop running process session"
+    echo "    process-unprocessed       - Process all unprocessed meetings in queue"
     echo ""
     echo "  Watchlist:"
     echo "    preview-watchlist              - Show cities users are watching"
@@ -903,14 +834,15 @@ show_help() {
     echo "    users                          - Show users, alerts, and city requests"
     echo ""
     echo "Examples:"
-    echo "  $0 status                                  # Check what's running"
-    echo "  $0 sync-cities paloaltoCA                  # Fetch single city"
-    echo "  $0 sync-cities @munis/bay-area.txt         # Fetch region (free)"
-    echo "  $0 sync-county montereycountyCA            # Fetch county + all linked cities"
-    echo "  $0 process-cities paloaltoCA               # Process in screen"
-    echo "  $0 process-county montereycountyCA         # Process county + linked cities"
-    echo "  $0 sync-and-process-cities paloaltoCA      # Fetch + process"
-    echo "  $0 users                                   # Show user activity"
+    echo "  $0 status                              # Check what's running"
+    echo "  $0 sync paloaltoCA                     # Fetch single city"
+    echo "  $0 sync @munis/bay-area.txt            # Fetch region from file"
+    echo "  $0 sync montereycountyCA               # Fetch county + all linked cities"
+    echo "  $0 sync GA                             # Fetch every jurisdiction in Georgia"
+    echo "  $0 process paloaltoCA                  # Process in screen"
+    echo "  $0 process GA                          # Process every Georgia jurisdiction"
+    echo "  $0 sync-and-process paloaltoCA         # Fetch + process"
+    echo "  $0 users                               # Show user activity"
 }
 
 # Main command handling
@@ -977,7 +909,7 @@ case "$COMMAND" in
     # Deployment
     update)         quick_update ;;
     deploy)         deploy_full ;;
-    sync)           sync_deps ;;
+    sync-deps)      sync_deps ;;
 
     # Prometheus
     start-prometheus)   cmd_start_prometheus ;;
@@ -998,12 +930,9 @@ case "$COMMAND" in
     map-all)            cmd_map_all ;;
 
     # Data operations
-    sync-cities)         sync_cities "$2" ;;
-    process-cities)      process_cities "$2" ;;
-    sync-and-process-cities) sync_and_process_cities "$2" ;;
-    sync-county)         sync_county "$2" ;;
-    process-county)      process_county "$2" ;;
-    sync-and-process-county) sync_and_process_county "$2" ;;
+    sync)                sync "$2" ;;
+    process)             process "$2" ;;
+    sync-and-process)    sync_and_process "$2" ;;
     attach)              attach_process ;;
     kill-process)        kill_process ;;
     process-unprocessed) process_unprocessed ;;

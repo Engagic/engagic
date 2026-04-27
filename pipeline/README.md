@@ -87,16 +87,19 @@ engagic-conductor daemon       # Combined sync + processing (two async tasks)
 engagic-conductor fetcher      # Sync only, no processing
 engagic-conductor processor    # Processing only, no sync (stale job recovery on start)
 
-# Single city operations
-engagic-conductor sync-city paloaltoCA
-engagic-conductor sync-and-process-city paloaltoCA
+# Inspection
 engagic-conductor preview-queue paloaltoCA
 engagic-conductor status
 
-# Multi-city operations (comma-separated or @file)
-engagic-conductor sync-cities paloaltoCA,oaklandCA
-engagic-conductor process-cities @cities.txt
-engagic-conductor sync-and-process-cities paloaltoCA,oaklandCA
+# Sync/process operations - TARGETS may be city bananas, county bananas, state codes, or @file
+# (comma-separated, mixed forms allowed)
+engagic-conductor sync paloaltoCA                          # one city
+engagic-conductor sync paloaltoCA,oaklandCA                # multiple cities
+engagic-conductor sync montereycountyCA                    # county + linked cities
+engagic-conductor sync GA                                  # every jurisdiction in Georgia
+engagic-conductor sync @cities.txt                         # from file
+engagic-conductor process GA
+engagic-conductor sync-and-process paloaltoCA
 
 # Watchlist operations (user-demanded cities)
 engagic-conductor preview-watchlist
@@ -832,11 +835,11 @@ ENGAGIC_LOG_LEVEL=INFO
 ### Local Development (One-Off Sync)
 
 ```bash
-# Sync single city
-engagic-conductor sync-city paloaltoCA
+# Sync single city (or county banana, or state code, or @file)
+engagic-conductor sync paloaltoCA
 
 # Sync and process immediately
-engagic-conductor sync-and-process-city paloaltoCA
+engagic-conductor sync-and-process paloaltoCA
 
 # Preview queue
 engagic-conductor preview-queue paloaltoCA

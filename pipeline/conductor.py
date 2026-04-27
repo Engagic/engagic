@@ -390,17 +390,32 @@ def _parse_city_list(arg: str) -> List[str]:
 
 
 async def _expand_jurisdictions(db: Database, bananas: List[str]) -> List[str]:
-    """Expand county bananas into county + all linked cities.
+    """Expand county and state inputs into the full jurisdiction set.
 
-    Any banana whose jurisdiction type is 'county' gets replaced with
-    the county itself plus all cities that reference it via county_banana.
-    Non-county bananas pass through unchanged. Preserves order, deduplicates.
+    Three input forms are accepted per entry:
+      - State code (2 uppercase letters, e.g. "GA"): all jurisdictions in that state
+      - County banana (type='county'): the county plus every linked city
+      - Anything else: passed through as a literal banana
+
+    Preserves order, deduplicates.
     """
     expanded = []
     seen = set()
     for banana in bananas:
         if banana in seen:
             continue
+
+        # State code: 2 uppercase letters
+        if len(banana) == 2 and banana.isalpha() and banana.isupper():
+            state_jurisdictions = await db.cities.get_cities(state=banana)
+            state_bananas = [j.banana for j in state_jurisdictions]
+            logger.info("expanded state", state=banana, jurisdictions=len(state_bananas))
+            for b in state_bananas:
+                if b not in seen:
+                    seen.add(b)
+                    expanded.append(b)
+            continue
+
         city = await db.cities.get_city(banana)
         if city and city.type == "county":
             county_bananas = await db.cities.get_county_jurisdictions(banana)
@@ -446,42 +461,17 @@ def main():
         if ctx.invoked_subcommand is None:
             click.echo(ctx.get_help())
 
-    @cli.command("sync-city")
-    @click.argument("banana", type=BANANA)
-    def sync_city(banana):
-        """Sync specific city by city_banana"""
-        async def run():
-            db = await Database.create()
-            try:
-                async with Conductor(db) as conductor:
-                    return await conductor.force_sync_city(banana)
-            finally:
-                await db.close()
+    @cli.command("sync")
+    @click.argument("targets")
+    def sync(targets):
+        """Sync jurisdictions (comma-separated bananas, state codes, or @file path).
 
-        result = asyncio.run(run())
-        click.echo(f"Sync result: {result}")
-
-    @cli.command("sync-and-process-city")
-    @click.argument("banana", type=BANANA)
-    def sync_and_process_city(banana):
-        """Sync city and immediately process all its meetings"""
-        async def run():
-            db = await Database.create()
-            try:
-                async with Conductor(db) as conductor:
-                    return await conductor.sync_and_process_city(banana)
-            finally:
-                await db.close()
-
-        result = asyncio.run(run())
-        click.echo(json.dumps(result, indent=2))
-
-    @cli.command("sync-cities")
-    @click.argument("cities")
-    def sync_cities(cities):
-        """Sync multiple cities (comma-separated bananas or @file path).
-        County bananas auto-expand to include all linked cities."""
-        city_list = _parse_city_list(cities)
+        Each entry is interpreted as one of:
+          - 2-letter state code (GA): every jurisdiction in that state
+          - County banana (montereycountyCA): the county plus all linked cities
+          - City banana (paloaltoCA): that city
+        """
+        city_list = _parse_city_list(targets)
 
         async def run():
             db = await Database.create()
@@ -496,12 +486,17 @@ def main():
         results = asyncio.run(run())
         click.echo(json.dumps(results, indent=2))
 
-    @cli.command("process-cities")
-    @click.argument("cities")
-    def process_cities(cities):
-        """Process queued jobs for multiple cities (comma-separated bananas or @file path).
-        County bananas auto-expand to include all linked cities."""
-        city_list = _parse_city_list(cities)
+    @cli.command("process")
+    @click.argument("targets")
+    def process(targets):
+        """Process queued jobs for jurisdictions (comma-separated bananas, state codes, or @file path).
+
+        Each entry is interpreted as one of:
+          - 2-letter state code (GA): every jurisdiction in that state
+          - County banana (montereycountyCA): the county plus all linked cities
+          - City banana (paloaltoCA): that city
+        """
+        city_list = _parse_city_list(targets)
 
         async def run():
             db = await Database.create()
@@ -536,12 +531,17 @@ def main():
         results = asyncio.run(run())
         click.echo(f"Complete: {results['processed']} meetings, {results['items_new']} new items")
 
-    @cli.command("sync-and-process-cities")
-    @click.argument("cities")
-    def sync_and_process_cities(cities):
-        """Sync and process multiple cities (comma-separated bananas or @file path).
-        County bananas auto-expand to include all linked cities."""
-        city_list = _parse_city_list(cities)
+    @cli.command("sync-and-process")
+    @click.argument("targets")
+    def sync_and_process(targets):
+        """Sync and process jurisdictions (comma-separated bananas, state codes, or @file path).
+
+        Each entry is interpreted as one of:
+          - 2-letter state code (GA): every jurisdiction in that state
+          - County banana (montereycountyCA): the county plus all linked cities
+          - City banana (paloaltoCA): that city
+        """
+        city_list = _parse_city_list(targets)
 
         async def run():
             db = await Database.create()

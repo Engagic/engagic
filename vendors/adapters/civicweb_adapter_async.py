@@ -37,7 +37,7 @@ CIVICWEB_CONFIG_FILE = "data/civicweb_sites.json"
 #   Sonoma:    "18 Mar 2026" (day month year)
 #   Calistoga: "Mar 31 2026" (month day year)
 _DATE_DMY_RE = re.compile(r'(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})')
-_DATE_MDY_RE = re.compile(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(\d{4})')
+_DATE_MDY_RE = re.compile(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})')
 
 # Document URL on meeting pages: /document/{id}/{name}.{ext}?handle={hash}
 # Most sites serve a native .pdf, but some (e.g. Bee Cave) upload .docx and
@@ -200,7 +200,7 @@ class AsyncCivicWebAdapter(AsyncBaseAdapter):
 
             # Clean title: strip date suffix and ***CANCELLED*** prefix
             title = re.sub(r'\*{3}CANCELLED\*{3}\s*', '', text, flags=re.IGNORECASE).strip()
-            title = re.sub(r'\s*-\s*(?:\d{1,2}\s+\w{3}|\w{3}\s+\d{1,2})\s+\d{4}.*$', '', title).strip()
+            title = re.sub(r'\s*-\s*(?:\d{1,2}\s+\w{3}|\w{3}\s+\d{1,2}),?\s+\d{4}.*$', '', title).strip()
             title = re.sub(r'\s+Amended Agenda$', '', title).strip()
             if not title:
                 title = text
