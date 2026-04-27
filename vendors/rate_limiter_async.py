@@ -4,6 +4,7 @@ import asyncio
 import time
 import random
 from collections import defaultdict
+from typing import Optional
 
 from config import get_logger
 
@@ -64,3 +65,26 @@ class AsyncRateLimiter:
                     await asyncio.sleep(sleep_time)
 
             self.last_request[vendor] = time.time()
+
+    async def respect_retry_after(self, vendor: str, seconds: float):
+        """Honor a Retry-After header by deferring the next request to this vendor.
+
+        Caps the deferral so a misbehaving server can't park the sync forever.
+        """
+        seconds = max(0.0, min(seconds, 120.0))
+        async with self.lock:
+            self.last_request[vendor] = time.time() + seconds
+        logger.info("honoring retry-after", vendor=vendor, defer_seconds=round(seconds, 1))
+
+
+# Process-wide singleton: every adapter and the fetcher share one limiter so
+# per-request gating, per-city gating, and Retry-After deferrals all serialize
+# against the same per-vendor delay tracking.
+_GLOBAL_RATE_LIMITER: Optional[AsyncRateLimiter] = None
+
+
+def get_rate_limiter() -> AsyncRateLimiter:
+    global _GLOBAL_RATE_LIMITER
+    if _GLOBAL_RATE_LIMITER is None:
+        _GLOBAL_RATE_LIMITER = AsyncRateLimiter()
+    return _GLOBAL_RATE_LIMITER

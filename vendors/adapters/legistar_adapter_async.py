@@ -875,7 +875,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                 self._process_html_meeting_row(row, html_base_url, start_date, end_date)
             )
 
-        processed_meetings = await asyncio.gather(*meeting_tasks, return_exceptions=True)
+        processed_meetings = await self._bounded_gather(meeting_tasks, max_concurrent=5, return_exceptions=True)
 
         # Filter out None, errors, and duplicates (calendar has upcoming + all sections)
         seen_ids = set()
@@ -1117,7 +1117,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
                     self._fetch_item_attachments_async(item, base_url)
                     for item in substantive_items
                 ]
-                attachment_results = await asyncio.gather(*attachment_tasks, return_exceptions=True)
+                attachment_results = await self._bounded_gather(attachment_tasks, max_concurrent=5, return_exceptions=True)
 
                 for item, attachments in zip(substantive_items, attachment_results):
                     if isinstance(attachments, list) and attachments:

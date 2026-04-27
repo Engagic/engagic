@@ -239,6 +239,7 @@ class AsyncBoardBookAdapter(AsyncBaseAdapter):
 
         soup = BeautifulSoup(html, "html.parser")
         items = self._parse_agenda_items(soup)
+        packet_url = self._extract_custom_agenda_pdf(soup)
 
         meeting: Dict[str, Any] = {
             "vendor_id": ref["meeting_id"],
@@ -250,6 +251,11 @@ class AsyncBoardBookAdapter(AsyncBaseAdapter):
             meeting["location"] = ref["location"]
         if items:
             meeting["items"] = items
+        elif packet_url:
+            # CustomAgendaForMeeting variant: /Public/Agenda/... 302s to a
+            # PDF-viewer page with no structured items. Hand the packet URL
+            # to the monolithic-summarization path.
+            meeting["packet_url"] = packet_url
 
         metadata: Dict[str, Any] = {}
         if ref.get("body_name"):
@@ -264,6 +270,21 @@ class AsyncBoardBookAdapter(AsyncBaseAdapter):
             meeting["meeting_status"] = status
 
         return meeting
+
+    def _extract_custom_agenda_pdf(self, soup: BeautifulSoup) -> Optional[str]:
+        """Detect the CustomAgendaForMeeting variant and return its PDF URL.
+
+        These pages have no agenda-item table; the entire agenda is a single
+        PDF rendered through SparqWebViewer, with the document GUID in a
+        hidden input. Convert to the direct DownloadPDF endpoint.
+        """
+        doc_input = soup.find("input", id="NewDocumentViewerDocumentID")
+        if not doc_input:
+            return None
+        doc_id = doc_input.get("value", "")
+        if not doc_id:
+            return None
+        return f"{self.base_url}/Documents/DownloadPDF/{doc_id}?org={self.org_id}"
 
     # ------------------------------------------------------------------
     # Agenda item parser
@@ -325,12 +346,16 @@ class AsyncBoardBookAdapter(AsyncBaseAdapter):
         for sequence, item_id in enumerate(order, start=1):
             node = nodes[item_id]
 
-            # Walk up to the highest ancestor for the section label
-            section_title = ""
+            # Build top-down breadcrumb of ancestor titles. BoardBook agendas
+            # nest several levels (e.g. Closed Session > Personnel > New Hires
+            # > Michelle Manna); only the deepest leaf carries meaningful
+            # context, and the intermediate levels are where the topic lives.
+            crumb: List[str] = []
             cursor = parents.get(item_id, "0")
             while cursor != "0" and cursor in nodes:
-                section_title = nodes[cursor]["title"]
+                crumb.append(nodes[cursor]["title"])
                 cursor = parents.get(cursor, "0")
+            crumb.reverse()
 
             item: Dict[str, Any] = {
                 "vendor_item_id": item_id,
@@ -341,8 +366,11 @@ class AsyncBoardBookAdapter(AsyncBaseAdapter):
             }
             if node["body_text"]:
                 item["body_text"] = node["body_text"]
-            if section_title:
-                item["metadata"] = {"section": section_title}
+            if crumb:
+                item["metadata"] = {
+                    "section": crumb[0],
+                    "section_path": " > ".join(crumb),
+                }
             items.append(item)
 
         return items

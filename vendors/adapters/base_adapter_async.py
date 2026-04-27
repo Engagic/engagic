@@ -18,6 +18,7 @@ from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
 from vendors.adapters.parsers.agenda_chunker import parse_agenda_pdf, _normalize_link_url
 from vendors.adapters.parsers.agenda_chunker_v2 import parse_agenda_pdf_v2
+from vendors.rate_limiter_async import get_rate_limiter
 from vendors.session_manager_async import AsyncSessionManager
 from exceptions import VendorHTTPError
 
@@ -86,7 +87,14 @@ class AsyncBaseAdapter:
         return await AsyncSessionManager.get_session(self.vendor)
 
     async def _request(self, method: str, url: str, **kwargs) -> aiohttp.ClientResponse:
-        """Make async HTTP request with error handling. Raises VendorHTTPError on failure."""
+        """Make async HTTP request with rate limiting and error handling.
+
+        Every request gates through the shared per-vendor rate limiter, so
+        adapter-internal concurrency (gather/_bounded_gather) naturally
+        serializes at the configured cadence rather than firing in parallel.
+        On 429/503 with a Retry-After header, defers the vendor's next slot
+        and raises VendorHTTPError -- callers decide whether to retry.
+        """
         session = await self._get_session()
 
         if "timeout" not in kwargs:
@@ -103,6 +111,11 @@ class AsyncBaseAdapter:
         # Granicus has SSL cert issues on S3 redirects (confidence: 8/10)
         if self.vendor == "granicus" or "granicus.com" in url or "granicus_production_attachments" in url:
             kwargs["ssl"] = False
+
+        # Per-request politeness gate: every request waits its turn for this
+        # vendor. Single global lock means parallel coroutines queue rather
+        # than burst.
+        await get_rate_limiter().wait_if_needed(self.vendor)
 
         start_time = time.time()
 
@@ -122,6 +135,15 @@ class AsyncBaseAdapter:
             )
 
             if response.status >= 400:
+                # Honor Retry-After when the server explicitly tells us how
+                # long to back off. Applies to 429 (rate-limited) and 503
+                # (service unavailable) -- both indicate the server wants us
+                # to pause, not retry blindly.
+                if response.status in (429, 503):
+                    retry_after = self._parse_retry_after(response.headers.get("Retry-After"))
+                    if retry_after is not None:
+                        await get_rate_limiter().respect_retry_after(self.vendor, retry_after)
+
                 error_body = await response.text()
                 self.metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{response.status}").inc()
                 err = VendorHTTPError(
@@ -160,6 +182,28 @@ class AsyncBaseAdapter:
             self.metrics.record_error(component="vendor", error=e)
             logger.error("vendor request failed", vendor=self.vendor, slug=self.slug, url=url[:100], error=str(e), error_type=type(e).__name__, duration_seconds=round(duration, 2))
             raise VendorHTTPError(f"Request failed: {e}", vendor=self.vendor, url=url, city_slug=self.slug) from e
+
+    @staticmethod
+    def _parse_retry_after(value: Optional[str]) -> Optional[float]:
+        """Parse a Retry-After header (seconds OR HTTP-date). None on bad input."""
+        if not value:
+            return None
+        value = value.strip()
+        try:
+            return float(value)
+        except ValueError:
+            pass
+        # HTTP-date form: defer to email.utils since aiohttp doesn't expose a parser
+        try:
+            from email.utils import parsedate_to_datetime
+            dt = parsedate_to_datetime(value)
+            if dt is None:
+                return None
+            now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+            delta = (dt - now).total_seconds()
+            return max(0.0, delta)
+        except (TypeError, ValueError):
+            return None
 
     async def _get(self, url: str, **kwargs) -> aiohttp.ClientResponse:
         """GET request. Raises VendorHTTPError on failure."""

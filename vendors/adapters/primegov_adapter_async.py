@@ -156,7 +156,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
         )
 
         meeting_tasks = [self._process_meeting(meeting) for meeting in meetings_in_range]
-        processed_meetings = await asyncio.gather(*meeting_tasks)
+        processed_meetings = await self._bounded_gather(meeting_tasks, max_concurrent=5, return_exceptions=False)
 
         return [m for m in processed_meetings if m is not None]
 
@@ -181,7 +181,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
             url = f"{self.base_url}/api/v2/PublicPortal/ListArchivedMeetings?year={year}"
             tasks.append(self._fetch_archived_year(url, year))
 
-        results = await asyncio.gather(*tasks)
+        results = await self._bounded_gather(tasks, max_concurrent=5, return_exceptions=False)
         for year_meetings in results:
             archived_meetings.extend(year_meetings)
 
@@ -266,7 +266,7 @@ class AsyncPrimeGovAdapter(AsyncBaseAdapter):
                 agenda_types=[t for _, t in agenda_docs]
             )
 
-        results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+        results = await self._bounded_gather(fetch_tasks, max_concurrent=5, return_exceptions=True)
 
         # Merge items in priority order, deduplicate by vendor_item_id
         seen_ids = set()

@@ -15,7 +15,7 @@ from database.models import City
 from exceptions import VendorError
 from vendors.adapters.base_adapter_async import FetchResult
 from vendors.factory import get_async_adapter, VENDOR_ADAPTERS
-from vendors.rate_limiter_async import AsyncRateLimiter
+from vendors.rate_limiter_async import get_rate_limiter
 from config import config, get_logger
 from pipeline.protocols import MetricsCollector, NullMetrics
 from pipeline.orchestrators import MeetingSyncOrchestrator
@@ -82,7 +82,9 @@ class Fetcher:
     def __init__(self, db: Database, metrics: Optional[MetricsCollector] = None):
         self.db = db
         self.metrics = metrics or NullMetrics()
-        self.rate_limiter = AsyncRateLimiter()
+        # Shared with adapter `_request` -- per-vendor delays are enforced once
+        # per request, not once per city, so the same limiter coordinates both.
+        self.rate_limiter = get_rate_limiter()
         self.failed_cities: Set[str] = set()
         # Use asyncio.Event for proper async-safe shutdown signaling
         self._shutdown_event = asyncio.Event()
@@ -150,7 +152,7 @@ class Fetcher:
                 async with semaphore:
                     if not self.is_running:
                         return None
-                    await self.rate_limiter.wait_if_needed(vendor)
+                    # Per-request gating in adapter `_request` handles vendor delay
                     result = await self._sync_city_with_retry(city)
                     logger.info("sync completed", city=city.banana, status=result.status.value)
 
@@ -193,7 +195,7 @@ class Fetcher:
                 results.append(SyncResult(city_banana=banana, status=SyncStatus.FAILED, error_message="City not found in database"))
                 continue
 
-            await self.rate_limiter.wait_if_needed(city.vendor)
+            # Per-request gating in adapter `_request` handles vendor delay
             result = await self._sync_city_with_retry(city)
             results.append(result)
 
@@ -234,7 +236,7 @@ class Fetcher:
                 logger.warning("malformed extra_vendor", city=city.banana, extra=extra)
                 continue
 
-            await self.rate_limiter.wait_if_needed(vendor)
+            # Per-request gating in adapter `_request` handles vendor delay
             extra_result = await self._sync_with_vendor(city, vendor, slug)
             aggregate = _merge_sync_results(aggregate, extra_result)
 

@@ -156,7 +156,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
         # Fetch listings from all views concurrently
         listing_tasks = [self._fetch_view_listing(v) for v in self.views]
-        listing_results = await asyncio.gather(*listing_tasks, return_exceptions=True)
+        listing_results = await self._bounded_gather(listing_tasks, max_concurrent=5, return_exceptions=True)
 
         meetings_in_range = []
         for idx, result in enumerate(listing_results):
