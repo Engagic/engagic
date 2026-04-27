@@ -5,6 +5,7 @@ import time
 import random
 from collections import defaultdict
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from config import get_logger
 
@@ -46,11 +47,11 @@ DELAYS: Dict[str, float] = {
 # vendor is sized for high concurrent traffic from real district staff. Keep
 # at 1 for vendors that have shown signs of aggressive bot blocking.
 SLOTS: Dict[str, int] = {
-    "boardbook": 3,   # Sparq SaaS, ~hundreds of districts -- 2 req/sec aggregate
-    "legistar": 2,    # Many cities on legistar.com subdomains
-    "granicus": 2,    # Many cities on granicus.com subdomains
-    "primegov": 2,    # Multi-tenant SaaS
-    "civicclerk": 2,  # Multi-tenant SaaS
+    "boardbook": 5,   # Sparq SaaS, ~hundreds of districts -- 3.3 req/sec aggregate
+    "legistar": 3,    # Many cities on legistar.com subdomains
+    "granicus": 3,    # Many cities on granicus.com subdomains
+    "primegov": 3,    # Multi-tenant SaaS
+    "civicclerk": 3,  # Multi-tenant SaaS
     # Everyone else stays at 1 (default below)
 }
 
@@ -129,3 +130,59 @@ def get_rate_limiter() -> AsyncRateLimiter:
     if _GLOBAL_RATE_LIMITER is None:
         _GLOBAL_RATE_LIMITER = AsyncRateLimiter()
     return _GLOBAL_RATE_LIMITER
+
+
+# Host-substring → vendor name. Order matters: more-specific entries first
+# (e.g. legistar.granicus.com before granicus.com).
+_HOST_VENDOR_PATTERNS = [
+    ("meetings.boardbook.org", "boardbook"),
+    ("legistar.granicus.com", "legistar"),
+    ("legistar1.granicus.com", "legistar"),
+    ("legistar2.granicus.com", "legistar"),
+    ("legistar3.granicus.com", "legistar"),
+    (".legistar.com", "legistar"),
+    (".legistar1.com", "legistar"),
+    (".granicus.com", "granicus"),
+    ("granicus_production_attachments", "granicus"),
+    (".primegov.com", "primegov"),
+    (".api.civicclerk.com", "civicclerk"),
+    (".novusagenda.com", "novusagenda"),
+    (".civicplus.com", "civicplus"),
+    (".civicweb.net", "civicweb"),
+    (".iqm2.com", "iqm2"),
+    ("municodemeetings.com", "municode"),
+    (".escribemeetings.com", "escribe"),
+    ("public.destinyhosted.com", "destiny"),
+    ("destinyhosted.com", "destiny"),
+    ("hylandcloud.com", "onbase"),
+    ("berkeleyca.gov", "berkeley"),
+    ("menlopark.gov", "menlopark"),
+    ("chicityclerkelms.chicago.gov", "chicago"),
+]
+
+
+def vendor_for_url(url: str) -> str:
+    """Map a URL to its vendor name for rate-limiting purposes.
+
+    Returns "unknown" for hosts we don't recognize (gets conservative pacing)
+    or for shared CDNs (S3, CloudFront) where the vendor is ambiguous.
+    """
+    if not url:
+        return "unknown"
+    try:
+        parsed = urlparse(url)
+    except (ValueError, AttributeError):
+        return "unknown"
+    host = (parsed.netloc or "").lower()
+    if not host:
+        return "unknown"
+
+    # Granicus's staff reports live on S3 with a vendor-tagged bucket name in
+    # the path; the host alone is just `s3.amazonaws.com`. Check the path too.
+    if "granicus_production_attachments" in (parsed.path or "").lower():
+        return "granicus"
+
+    for pattern, vendor in _HOST_VENDOR_PATTERNS:
+        if pattern in host:
+            return vendor
+    return "unknown"
