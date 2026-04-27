@@ -28,6 +28,7 @@ from vendors.adapters.custom.ross_adapter_async import AsyncRossAdapter
 from vendors.adapters.visioninternet_adapter_async import AsyncVisionInternetAdapter
 from vendors.adapters.agendaonline_adapter_async import AsyncAgendaOnlineAdapter
 from vendors.adapters.destiny_adapter_async import AsyncDestinyAdapter
+from vendors.adapters.boardbook_adapter_async import AsyncBoardBookAdapter
 
 logger = get_logger(__name__).bind(component="vendor")
 
@@ -53,6 +54,7 @@ VENDOR_ADAPTERS = {
     "visioninternet": AsyncVisionInternetAdapter,
     "agendaonline": AsyncAgendaOnlineAdapter,
     "destiny": AsyncDestinyAdapter,
+    "boardbook": AsyncBoardBookAdapter,
 }
 
 def get_async_adapter(
