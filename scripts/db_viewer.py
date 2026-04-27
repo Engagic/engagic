@@ -33,6 +33,58 @@ def to_banana_slug(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]", "", ascii_only).lower()
 
 
+# Order matters: longest phrases first so "school district" doesn't fire before
+# "independent school district" can. The loop in derive_district_stem strips
+# repeatedly, so "Joint Unified School District" peels in three passes.
+_DISTRICT_SUFFIXES = (
+    "consolidated school district",
+    "independent school district",
+    "joint unified school district",
+    "unified school district",
+    "regional school district",
+    "central school district",
+    "public schools",
+    "school district",
+    "city schools",
+    "schools",
+    "consolidated",
+    "independent",
+    "regional",
+    "unified",
+    "central",
+    "joint",
+    "isd",
+    "usd",
+    "csd",
+    "psd",
+    "rsd",
+)
+
+
+def derive_district_stem(name: str) -> str:
+    """Strip district-suffix words from the right to produce a short banana stem.
+
+    'Prosper Independent School District' -> 'prosper'
+    'Los Angeles Unified School District' -> 'losangeles'
+    'Fairfax County Public Schools'       -> 'fairfaxcounty'
+    'Pierre School District 32-2'         -> 'pierre'
+
+    Geographic qualifiers ('county', 'city') are preserved -- 'Fairfax County'
+    is meaningfully distinct from 'Fairfax City'. Trailing district numbers
+    (SD/IL/IA convention, e.g. '32-2') are stripped before suffix matching.
+    """
+    s = re.sub(r"\s+[\d\-]+$", "", name.strip())
+    while True:
+        lower = s.lower()
+        for suf in _DISTRICT_SUFFIXES:
+            if lower.endswith(" " + suf) or lower == suf:
+                s = s[: -len(suf)].rstrip()
+                break
+        else:
+            break
+    return to_banana_slug(s)
+
+
 # State abbreviation to FIPS code mapping
 STATE_TO_FIPS = {
     'AL': '01', 'AK': '02', 'AZ': '04', 'AR': '05', 'CA': '06',
@@ -586,6 +638,89 @@ class DatabaseViewer:
             print(f"Error adding county: {e}")
             return False
 
+    async def add_school_district(self):
+        """Interactive school district addition.
+
+        School districts are jurisdictions in their own right -- they hold
+        meetings, publish agendas, and have governing boards. They do NOT
+        live in census_places (boundaries are in TIGER tl_*_unsd / _elsd /
+        _scsd shapefiles), so we skip the auto-geometry/population lookup
+        that add_city does. Users supply population manually if known.
+        """
+        print("\n=== ADD NEW SCHOOL DISTRICT ===")
+
+        try:
+            district_name = input("District name (e.g. 'Prosper Independent School District'): ").strip()
+            if not district_name:
+                print("District name required")
+                return False
+
+            state = input("State (2-letter code): ").strip().upper()
+            if len(state) != 2:
+                print("State must be 2-letter code (e.g., CA)")
+                return False
+
+            # Auto-derive a short stem; let user override if the heuristic over-strips.
+            # Mirrors the county convention: display name stays full, banana stays short.
+            auto_stem = derive_district_stem(district_name)
+            stem_input = input(f"Banana stem [auto: '{auto_stem}'] (Enter to accept): ").strip()
+            stem = to_banana_slug(stem_input) if stem_input else auto_stem
+            if not stem:
+                print("Stem cannot be empty")
+                return False
+            banana = stem + "sd" + state
+            print(f"   Banana will be: {banana}")
+
+            slug = input("Slug (vendor-specific): ").strip()
+            if not slug:
+                print("Slug required")
+                return False
+
+            vendor = input("Vendor (granicus/primegov/legistar/iqm2/etc): ").strip()
+            if not vendor:
+                print("Vendor required")
+                return False
+
+            county_banana = input("Parent county banana (optional, e.g. losangelescountyCA): ").strip() or None
+            if county_banana:
+                parent = await self.db.cities.get_city(county_banana)
+                if not parent:
+                    print(f"   No jurisdiction found with banana '{county_banana}' -- skipping county link")
+                    county_banana = None
+                else:
+                    print(f"   Linking to: {parent.name}, {parent.state}")
+
+            pop_input = input("Population (optional, district enrollment or service-area): ").strip()
+            population = int(pop_input) if pop_input else None
+
+            district = Jurisdiction(
+                banana=banana,
+                name=district_name,
+                state=state,
+                vendor=vendor,
+                slug=slug,
+                type="school_district",
+                county_banana=county_banana,
+                status="active",
+                population=population,
+            )
+
+            await self.db.cities.upsert_city(district)
+
+            print(f"Added school district '{district_name}, {state}' with banana {banana}")
+            if population:
+                print(f"   Population: {population:,}")
+            if county_banana:
+                print(f"   Linked to county: {county_banana}")
+            return True
+
+        except KeyboardInterrupt:
+            print("\n\nCancelled")
+            return False
+        except Exception as e:
+            print(f"Error adding school district: {e}")
+            return False
+
     async def update_city(self):
         """Update city information - continuous edit mode"""
         current_banana = None
@@ -989,10 +1124,11 @@ async def main_loop():
             print("\nEdit Data:")
             print("  7. Add city")
             print("  8. Add county")
-            print("  9. Update jurisdiction")
+            print("  9. Add school district")
+            print("  10. Update jurisdiction")
             print("\nSearch & Analysis:")
-            print("  10. Search database (cities, zipcodes, meetings)")
-            print("  11. Search summaries (full-text summary search)")
+            print("  11. Search database (cities, zipcodes, meetings)")
+            print("  12. Search summaries (full-text summary search)")
             print("\nOther:")
             print("  0. Exit")
 
@@ -1040,12 +1176,15 @@ async def main_loop():
                 await viewer.add_county()
 
             elif choice == "9":
-                await viewer.update_city()
+                await viewer.add_school_district()
 
             elif choice == "10":
-                await viewer.search_database()
+                await viewer.update_city()
 
             elif choice == "11":
+                await viewer.search_database()
+
+            elif choice == "12":
                 await viewer.search_meeting_summaries()
 
             elif choice == "0":

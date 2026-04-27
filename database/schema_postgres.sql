@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS jurisdictions (
     vendor TEXT NOT NULL,
     slug TEXT NOT NULL,
     extra_vendors JSONB,  -- Additive [{vendor, slug}] for rare multi-vendor jurisdictions (e.g. Maricopa: BoS on OnBase, commissions on CivicPlus)
-    type TEXT NOT NULL DEFAULT 'city',  -- city, county, utility, transit, water_district, school_board, etc.
+    type TEXT NOT NULL DEFAULT 'city',  -- city, county, school_district, utility, transit, water_district, etc.
     county_banana TEXT,  -- FK to parent county jurisdiction (NULL for counties and non-county entities)
     status TEXT DEFAULT 'active',
     participation JSONB,  -- Jurisdiction-level participation config: {testimony_url, testimony_email, process_url}
