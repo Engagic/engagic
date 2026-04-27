@@ -95,8 +95,8 @@ def _extract_agenda_items(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     for section in sections:
         section_name = _extract_section_name(section)
 
-        # Find agenda items list
-        agenda_ul = section.find('ul', class_='agenda-items')
+        # Find agenda items list (some sites use <ol>, e.g. Stonecrest GA)
+        agenda_ul = section.find(['ul', 'ol'], class_='agenda-items')
         if not agenda_ul or not isinstance(agenda_ul, Tag):
             continue
 
