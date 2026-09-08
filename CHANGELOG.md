@@ -6,6 +6,34 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-09-08] Provider-Neutral LLM Backends: GLM-5.3-flash Replaces Gemini Flash-Lite
+
+A year on one provider was allegiance, not a decision. The summarizer now
+owns only prompts, effort tiering, and parsing; transport lives behind a
+ChatBackend protocol in analysis/llm/backends.py. The model follows price x
+quality with no loyalty: `ENGAGIC_LLM_BACKEND` = `zai` (native GLM, the
+production default), `openrouter` (the bench: one request shape reaches
+every model, provider pinning or throughput sort, real per-call cost), or
+`gemini` (rollback, and the only backend with a Batch lane).
+
+**Why now.** Gemini console Jun 11 - Sep 8: $846, batch savings $0. Motioncount's
+open-inventory bake-off put GLM-5.3-flash at 75% attribute accuracy and 100%
+amount accuracy for $0.003/item against Sonnet's 86% at $0.08. A 50-item
+re-summarization on the real v3.2 prompt: GLM $0.0019/call vs flash-lite
+$0.0066, 50/50 valid JSON on both, and GLM surfaces packet discrepancies
+(mislabeled amendment numbers, conflicting heights, unresolved fee-in-lieu
+terms) that flash-lite and the stored summaries skipped.
+
+**What changed.** GeminiSummarizer is Summarizer (alias kept). Thinking tiers
+became provider-neutral effort levels (low/medium/high by document size;
+`ENGAGIC_LLM_REASONING_EFFORT` pins one). `max_tokens` defaults to 24k off
+Gemini because reasoning tokens count against it. The system instruction in
+prompts_v3.json is now actually sent (the Gemini path never passed it). The
+Batch lane auto-disables off Gemini: GLM on demand is cheaper than Gemini in
+batch. `scripts/compare_llm_backends.py` is the gate for the next swap.
+
+---
+
 ## [2026-07-02] One Write Path: Shape Manufacturing Moves to Claim Time
 
 Two producers coordinating through first-writer-wins was a treaty, not an

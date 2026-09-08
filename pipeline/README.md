@@ -262,7 +262,9 @@ Meeting jobs split into two lanes at dequeue time
 
 Lanes are disjoint SQL predicates over `FOR UPDATE SKIP LOCKED` — no double
 claims. A meeting whose date drifts into the urgent window between retries
-switches lanes automatically. Kill switch: `ENGAGIC_BATCH_API_ENABLED=false`
+switches lanes automatically. Kill switch: `ENGAGIC_BATCH_API_ENABLED=false`.
+  The lane only exists on `ENGAGIC_LLM_BACKEND=gemini`; on the default Z.AI
+  backend every job takes the streaming lane (cheaper on demand than Gemini batch).
 restores single-lane behavior. Note: `process_city_jobs()` claims
 streaming-only; its non-urgent leftovers are drained by the daemon's batch
 lane.
@@ -908,7 +910,7 @@ inside its own transaction.
 
 **Required Environment Variables:**
 ```bash
-GEMINI_API_KEY=your_api_key_here
+ZAI_API_KEY=your_api_key_here          # ENGAGIC_LLM_BACKEND=zai (default); openrouter / gemini also supported
 POSTGRES_HOST=localhost
 POSTGRES_DB=engagic
 POSTGRES_USER=engagic
@@ -1000,7 +1002,7 @@ Measured baselines, stage definitions, queries, and post-rollout comparison
 instructions live in [`docs/PIPELINE_PERFORMANCE.md`](../docs/PIPELINE_PERFORMANCE.md).
 
 - **Sync cycle:** ~2 hours for 500 cities (rate-limited)
-- **Item processing:** 10-30s per item (Gemini latency)
+- **Item processing:** 3-20s per item (GLM-5.3-flash on Z.AI native)
 - **Batch processing:** Cost savings over individual calls
 - **Document caching:** Reduces extraction costs for shared attachments
 - **Incremental saving:** Prevents data loss on crashes

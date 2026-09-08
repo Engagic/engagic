@@ -1,11 +1,11 @@
 """
-Gemini LLM Orchestration - Smart model selection and prompt management
+LLM orchestration: prompt management, effort tiering, response parsing.
 
 Responsibilities:
 - Load prompts from prompts.json
-- Select appropriate model (flash vs flash-lite) based on document size
-- Configure extended thinking based on complexity
-- Handle single and batch API calls
+- Pick reasoning effort from document size
+- Drive the configured ChatBackend (analysis/llm/backends.py)
+- Gemini Batch lane (native backend only)
 - Parse and validate responses
 """
 
@@ -21,7 +21,6 @@ from importlib.resources import files
 from json import JSONDecodeError
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from google import genai
 from google.genai import types
 
 from config import config, get_logger
@@ -33,6 +32,17 @@ from analysis.llm.input_budget import (
 from analysis.llm.document_representation import (
     build_compact_representation,
     needs_proactive_representation,
+)
+from analysis.llm.backends import (
+    EFFORT_HIGH,
+    EFFORT_LEVELS,
+    EFFORT_LOW,
+    EFFORT_MEDIUM,
+    ChatBackend,
+    Completion,
+    build_backend,
+    price_estimate,
+    strip_code_fence,
 )
 from pipeline.protocols import MetricsCollector, NullMetrics
 from exceptions import LLMError
@@ -84,50 +94,39 @@ _SAFETY_FINISH_REASONS = frozenset(
 
 
 
-class GeminiSummarizer:
-    """Smart LLM orchestrator - picks model, picks prompt, formats response"""
+class Summarizer:
+    """LLM orchestrator: prompts, effort tiering, response parsing.
+
+    Transport lives in analysis/llm/backends.py. The class is named for its
+    job, not its provider; GeminiSummarizer remains as an import alias.
+    """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         prompts_path: Optional[str] = None,
-        metrics: Optional[MetricsCollector] = None
+        metrics: Optional[MetricsCollector] = None,
+        backend: Optional[ChatBackend] = None,
     ):
         """Initialize summarizer
 
         Args:
-            api_key: Gemini API key (defaults to env vars)
+            api_key: Provider API key (defaults to config for the configured backend)
             prompts_path: Path to prompts.json (defaults to same directory)
             metrics: Metrics collector for LLM call tracking (uses NullMetrics if not provided)
+            backend: Explicit transport; built from config when omitted
         """
         self.metrics = metrics or NullMetrics()
-
-        # Initialize Gemini client
-        self.api_key = (
-            api_key or os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
-        )
-        if not self.api_key:
-            raise ValueError(
-                "API key required - set GEMINI_API_KEY or LLM_API_KEY environment variable"
-            )
-
-        # Per-call timeout at the SDK / HTTP layer (ms). Mirrors the 300s
-        # asyncio.wait_for budget already enforced in analyzer_async, but here
-        # it ACTUALLY closes the underlying socket -- asyncio.wait_for on a
-        # to_thread-wrapped sync SDK call can't cancel the thread, so without
-        # this a stalled connection leaks the thread + connection past the
-        # async-layer timeout. With this, the SDK raises after 300s and the
-        # thread exits cleanly.
-        self.client = genai.Client(
-            api_key=self.api_key,
-            http_options=types.HttpOptions(timeout=300_000),
-        )
+        self.backend: ChatBackend = backend or build_backend(api_key)
+        # Gemini-only surfaces (Batch lane, context caches, native tokenizer)
+        # reach the SDK through this handle; None on every other transport.
+        self.client = getattr(self.backend, "client", None)
         self._batch_sdk_semaphore = asyncio.Semaphore(BATCH_SDK_CONCURRENCY)
         self._batch_submit_semaphore = asyncio.Semaphore(BATCH_SUBMIT_CONCURRENCY)
 
-        # Model IDs (env-overridable via config). Names reflect role, not generation:
-        # primary = default workhorse; small_doc = cost-saver when USE_FLASH_LITE + small input.
-        self.primary_model = config.PRIMARY_MODEL
+        # Model ids are backend-native. primary = default workhorse;
+        # small_doc = Gemini-only cost-saver when USE_FLASH_LITE + small input.
+        self.primary_model = self.backend.model
         self.small_doc_model = config.SMALL_DOC_MODEL
 
         # Load prompts from JSON. Version bumps when the template materially
@@ -145,7 +144,13 @@ class GeminiSummarizer:
             with open(prompts_path, "r") as f:
                 self.prompts = json.load(f)
 
-        logger.info("prompts loaded", prompt_categories=len(self.prompts), version=self.prompts_version)
+        logger.info(
+            "prompts loaded",
+            prompt_categories=len(self.prompts),
+            version=self.prompts_version,
+            backend=self.backend.name,
+            model=self.backend.model,
+        )
 
     async def _run_batch_sdk(self, call: Callable[..., Any], /, *args, **kwargs):
         """Run one synchronous Batch/Files/Caches SDK call off-loop."""
@@ -249,22 +254,15 @@ class GeminiSummarizer:
         *,
         cached_context: Optional[str] = None,
     ) -> int:
-        """Count one completed request with Gemini's model tokenizer."""
+        """Count one completed request with the backend tokenizer (or its estimate)."""
         count_input = (
             f"{cached_context}\n\n{prompt}" if cached_context else prompt
         )
-        response = await self._run_batch_sdk(
-            self.client.models.count_tokens,
-            model=self.primary_model,
-            contents=count_input,
-        )
-        total_tokens = getattr(response, "total_tokens", None)
-        if total_tokens is None:
-            raise ValueError("Gemini token counter returned no total_tokens")
-        return int(total_tokens)
+        return int(await self._run_batch_sdk(self.backend.count_tokens, count_input))
 
     # Compatibility for narrow callers/tests that used the former private name.
     _count_batch_input_tokens = _count_input_tokens
+
 
     async def prepare_document_input(
         self,
@@ -433,22 +431,8 @@ class GeminiSummarizer:
         return prepared
 
     def _calculate_cost(self, model_name: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate API cost in dollars based on model and token usage
-
-        Pricing (as of Nov 2025):
-        - Gemini Flash: $0.075/1M input, $0.30/1M output
-        - Gemini Flash-Lite: $0.0375/1M input, $0.15/1M output
-
-        Confidence: 8/10 - Pricing accurate as of deployment but may change
-        """
-        if "lite" in model_name.lower():
-            input_cost = (input_tokens / 1_000_000) * 0.0375
-            output_cost = (output_tokens / 1_000_000) * 0.15
-        else:
-            input_cost = (input_tokens / 1_000_000) * 0.075
-            output_cost = (output_tokens / 1_000_000) * 0.30
-
-        return input_cost + output_cost
+        """List-price estimate; callers prefer the provider-reported cost when present."""
+        return price_estimate(model_name, input_tokens, output_tokens)
 
     def _select_prompt_type(self) -> str:
         """Select prompt type for item summarization.
@@ -461,117 +445,61 @@ class GeminiSummarizer:
     def _select_model(self, page_count: int, text_size: int) -> tuple[str, str]:
         """Select model based on config and document size.
 
-        Args:
-            page_count: Document page count
-            text_size: Character count of text
+        One model per backend (no per-case routing); the Gemini small-doc
+        split survives only on the native backend for rollback parity.
 
         Returns:
             Tuple of (model_name, display_name)
         """
-        # Default: Flash for everything (consistent quality)
-        # If USE_FLASH_LITE enabled: use Flash-Lite for small docs (cost savings)
-        if config.USE_FLASH_LITE:
+        if self.backend.name == "gemini" and config.USE_FLASH_LITE:
             if text_size < FLASH_LITE_MAX_CHARS and page_count <= FLASH_LITE_MAX_PAGES:
                 return self.small_doc_model, "flash-lite"
-        return self.primary_model, "flash"
+        return self.primary_model, self.primary_model.rsplit("/", 1)[-1]
 
-    def _call_with_retry(self, model_name: str, prompt: str, config, max_retries: int = 4, max_retry_seconds: int = 180):
-        """Call Gemini API with automatic retry on transient errors.
+    def _effort_for(self, page_count: int, text_size: int) -> str:
+        """Reasoning effort tier by document size, unless config pins one.
 
-        Retryable conditions:
-          - 429 / RESOURCE_EXHAUSTED: respect Gemini's `retryDelay` if present
-          - 503 / UNAVAILABLE: server overloaded; exponential backoff with jitter
-          - 500 / INTERNAL: transient server error; same backoff
-          - 504 / DEADLINE_EXCEEDED: same backoff
-        Everything else raises immediately.
-
-        Args:
-            model_name: Gemini model to use
-            prompt: The prompt text
-            config: GenerateContentConfig
-            max_retries: Maximum retry attempts (default 4)
-            max_retry_seconds: Total time cap for all retries (default 180s = 3 mins)
-
-        Returns:
-            GenerateContentResponse from Gemini
-
-        Raises:
-            LLMError: If max retries exceeded
-            Original exception: For non-retryable errors
+        Same cutoffs the Gemini thinking tiers used: short agendas need no
+        deliberation, long packets with many attachments do.
         """
-        last_error = None
-        start_time = time.time()
+        if config.LLM_REASONING_EFFORT in EFFORT_LEVELS:
+            return config.LLM_REASONING_EFFORT
+        if page_count <= 10 and text_size <= 30000:
+            return EFFORT_LOW
+        if page_count <= 50 and text_size <= 150000:
+            return EFFORT_MEDIUM
+        return EFFORT_HIGH
 
-        for attempt in range(max_retries):
-            try:
-                response = self.client.models.generate_content(
-                    model=model_name, contents=prompt, config=config
-                )
-                return response
-
-            except Exception as e:  # Intentionally broad: retry logic needs to catch all errors
-                last_error = e
-                error_str = str(e)
-                is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
-                is_server_busy = (
-                    "503" in error_str
-                    or "UNAVAILABLE" in error_str
-                    or "500" in error_str
-                    or "INTERNAL" in error_str
-                    or "504" in error_str
-                    or "DEADLINE_EXCEEDED" in error_str
-                )
-
-                if not (is_rate_limit or is_server_busy):
-                    raise
-
-                if is_rate_limit:
-                    # Parse retryDelay from Gemini's error response (handles both quote styles)
-                    retry_match = re.search(r'["\']retryDelay["\']:\s*["\'](\d+)s?["\']', error_str)
-                    if retry_match:
-                        delay = int(retry_match.group(1)) + 1  # Add 1s buffer
-                    else:
-                        retry_match = re.search(r'retry.*?(\d+(?:\.\d+)?)\s*s', error_str, re.IGNORECASE)
-                        if retry_match:
-                            delay = int(float(retry_match.group(1))) + 1
-                        else:
-                            delay = 30 * (attempt + 1)
-                    reason = "rate_limit"
-                else:
-                    # 503/500/504: exponential backoff with jitter (2s, 4s, 8s, 16s + 0-1s jitter).
-                    # Shorter than rate-limit backoff because overload usually clears in seconds, not
-                    # the tens of seconds Gemini quotes in retryDelay.
-                    delay = (2 ** (attempt + 1)) + random.uniform(0, 1)
-                    reason = "server_busy"
-
-                elapsed = time.time() - start_time
-                if elapsed + delay > max_retry_seconds:
-                    logger.warning(
-                        "retry would exceed time cap, giving up",
-                        reason=reason,
-                        elapsed_seconds=round(elapsed),
-                        proposed_delay=round(delay, 1),
-                        max_retry_seconds=max_retry_seconds,
-                    )
-                    break
-
-                logger.warning(
-                    "transient gemini error, retrying",
-                    reason=reason,
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    delay_seconds=round(delay, 1),
-                    total_elapsed=round(elapsed),
-                )
-                time.sleep(delay)
-                continue
-
-        elapsed = time.time() - start_time
-        raise LLMError(
-            f"Transient-error retries exhausted after {round(elapsed)}s",
-            model=model_name,
-            prompt_type="unknown",
-            original_error=last_error,
+    def _record_call(
+        self,
+        *,
+        model_display: str,
+        prompt_type: str,
+        duration: float,
+        completion: Optional[Completion],
+    ) -> None:
+        if completion is None:
+            self.metrics.record_llm_call(
+                model=model_display,
+                prompt_type=prompt_type,
+                duration_seconds=duration,
+                input_tokens=0,
+                output_tokens=0,
+                cost_dollars=0,
+                success=False,
+            )
+            return
+        cost = completion.cost_usd
+        if cost is None:
+            cost = self.backend.estimate_cost(completion.input_tokens, completion.output_tokens)
+        self.metrics.record_llm_call(
+            model=model_display,
+            prompt_type=prompt_type,
+            duration_seconds=duration,
+            input_tokens=completion.input_tokens,
+            output_tokens=completion.output_tokens,
+            cost_dollars=cost,
+            success=True,
         )
 
     def summarize_meeting(self, text: str) -> str:
@@ -585,59 +513,57 @@ class GeminiSummarizer:
         """
         text_size = len(text)
         page_count = self._estimate_page_count(text)
-
-        # Model selection based on config
         model_name, model_display = self._select_model(page_count, text_size)
+        effort = self._effort_for(page_count, text_size)
+        prompt_type = "meeting_fallback"
 
-        logger.info("summarizing meeting", page_count=page_count, text_size=text_size, model=model_display)
+        logger.info(
+            "summarizing meeting",
+            page_count=page_count,
+            text_size=text_size,
+            model=model_display,
+            effort=effort,
+        )
 
         # Single fallback prompt for meeting-level summarization (v3)
         prompt = self._get_prompt("meeting", "fallback", text=text)
-
-        # Thinking configuration based on complexity
-        config = self._get_thinking_config(page_count, text_size, model_name)
-
-        # Track API call duration
         start_time = time.time()
-        prompt_type = "meeting_fallback"
 
         try:
-            response = self._call_with_retry(model_name, prompt, config)
-
-            if response.text is None:
-                raise ValueError("Gemini returned no text in response")
-
-            # Extract token usage if available
-            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
-            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
-
-            duration = time.time() - start_time
-
-            # Record metrics
-            self.metrics.record_llm_call(
-                model=model_display,
-                prompt_type=prompt_type,
-                duration_seconds=duration,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_dollars=self._calculate_cost(model_name, input_tokens, output_tokens),
-                success=True
+            completion = self.backend.complete(
+                user=prompt,
+                system=None,
+                schema=None,
+                effort=effort,
+                max_tokens=config.LLM_MAX_OUTPUT_TOKENS,
+                temperature=0.3,
             )
-
-            logger.info("meeting summarized", duration_seconds=round(duration, 1), input_tokens=input_tokens, output_tokens=output_tokens, model=model_display)
-
-            return response.text
+            duration = time.time() - start_time
+            self._record_call(
+                model_display=model_display,
+                prompt_type=prompt_type,
+                duration=duration,
+                completion=completion,
+            )
+            logger.info(
+                "meeting summarized",
+                duration_seconds=round(duration, 1),
+                input_tokens=completion.input_tokens,
+                output_tokens=completion.output_tokens,
+                reasoning_tokens=completion.reasoning_tokens,
+                cost_usd=completion.cost_usd,
+                provider=completion.provider,
+                model=model_display,
+            )
+            return completion.text
 
         except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
-            self.metrics.record_llm_call(
-                model=model_display,
+            self._record_call(
+                model_display=model_display,
                 prompt_type=prompt_type,
-                duration_seconds=duration,
-                input_tokens=0,
-                output_tokens=0,
-                cost_dollars=0,
-                success=False
+                duration=duration,
+                completion=None,
             )
             self.metrics.record_error(component="analyzer", error=e)
             logger.error("meeting summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__)
@@ -668,11 +594,10 @@ class GeminiSummarizer:
         if page_count is None:
             page_count = self._estimate_page_count(text)
 
-        # Prompt selection
         prompt_type = self._select_prompt_type()
-
-        # Model selection based on config
         model_name, model_display = self._select_model(page_count, text_size)
+        effort = self._effort_for(page_count, text_size)
+        metric_type = f"item_{prompt_type}"
 
         logger.info(
             "item processing",
@@ -680,93 +605,61 @@ class GeminiSummarizer:
             page_count=page_count,
             text_size=text_size,
             prompt_type=prompt_type,
-            model=model_display
+            model=model_display,
+            effort=effort,
         )
 
-        # Get adaptive prompt and config
+        prompt_spec = self.prompts["item"][prompt_type]
         prompt = self._get_prompt("item", prompt_type, title=item_title, text=text)
-        response_schema = self.prompts["item"][prompt_type].get("response_schema")
-        config = types.GenerateContentConfig(
-            temperature=0.3,
-            max_output_tokens=8192,  # Increased from 2048 to match batch API
-            response_mime_type="application/json",
-            response_schema=response_schema
-        )
-
-        # Track API call
         start_time = time.time()
 
         try:
-            response = self._call_with_retry(model_name, prompt, config)
-
-            # Extract text - handle various response structures
-            response_text = response.text
-            if not response_text:
-                # Try extracting from candidates structure (may have thinking blocks)
-                response_text = self._extract_text_from_response(response)
-
-            if not response_text:
-                # Log full response structure for debugging
-                logger.error(
-                    "gemini empty response debug",
-                    has_candidates=hasattr(response, 'candidates') and bool(response.candidates),
-                    candidate_count=len(response.candidates) if hasattr(response, 'candidates') and response.candidates else 0,
-                    has_prompt_feedback=hasattr(response, 'prompt_feedback'),
-                    prompt_feedback=str(getattr(response, 'prompt_feedback', None))[:200] if hasattr(response, 'prompt_feedback') else None
-                )
-                raise ValueError("Gemini returned no text")
-
-            # Extract token usage
-            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
-            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
-
-            duration = time.time() - start_time
-
-            # Record metrics
-            self.metrics.record_llm_call(
-                model=model_display,
-                prompt_type=f"item_{prompt_type}",
-                duration_seconds=duration,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_dollars=self._calculate_cost(model_name, input_tokens, output_tokens),
-                success=True
+            completion = self.backend.complete(
+                user=prompt,
+                system=prompt_spec.get("system_instruction"),
+                schema=prompt_spec.get("response_schema"),
+                effort=effort,
+                max_tokens=config.LLM_MAX_OUTPUT_TOKENS,
+                temperature=0.3,
             )
-
-            # Log completion
+            duration = time.time() - start_time
+            self._record_call(
+                model_display=model_display,
+                prompt_type=metric_type,
+                duration=duration,
+                completion=completion,
+            )
             logger.info(
                 "item summarized",
                 item_title=item_title[:50],
                 duration_seconds=round(duration, 1),
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                model=model_display
+                input_tokens=completion.input_tokens,
+                output_tokens=completion.output_tokens,
+                reasoning_tokens=completion.reasoning_tokens,
+                cost_usd=completion.cost_usd,
+                provider=completion.provider,
+                finish_reason=completion.finish_reason,
+                model=model_display,
             )
-
-            # Parse response based on version
-            summary, topics = self._parse_item_response(response_text)
-
-            return summary, topics
+            return self._parse_item_response(completion.text)
 
         except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
-            self.metrics.record_llm_call(
-                model=model_display,
-                prompt_type=f"item_{prompt_type}",
-                duration_seconds=duration,
-                input_tokens=0,
-                output_tokens=0,
-                cost_dollars=0,
-                success=False
+            self._record_call(
+                model_display=model_display,
+                prompt_type=metric_type,
+                duration=duration,
+                completion=None,
             )
             self.metrics.record_error(component="analyzer", error=e)
             logger.error("item summarization failed", duration_seconds=round(duration, 1), error=str(e), error_type=type(e).__name__, prompt_type=prompt_type)
             raise LLMError(
                 f"Item summarization failed after {duration:.1f}s",
                 model=model_display,
-                prompt_type=f"item_{prompt_type}",
+                prompt_type=metric_type,
                 original_error=e
             ) from e
+
 
     async def create_shared_context_cache(
         self, shared_context: Optional[str], meeting_id: Optional[str]
@@ -783,7 +676,7 @@ class GeminiSummarizer:
         is pennies, so we size the TTL past the job ceiling rather than gamble.
         """
         shared_context = limit_shared_context(shared_context)
-        if not shared_context:
+        if not shared_context or not self.backend.supports_context_cache:
             return None
 
         # Rough estimate: 1 token ~ 4 chars
@@ -1096,44 +989,6 @@ class GeminiSummarizer:
             and not part.get("thought")
         ]
         return "".join(text_parts) or None
-
-    def _extract_text_from_response(self, response) -> Optional[str]:
-        """Extract text from live Gemini API response object
-
-        Handles various response structures including thinking blocks.
-        Used when response.text is None/empty.
-
-        Args:
-            response: GenerateContentResponse object from Gemini API
-
-        Returns:
-            Extracted text or None if not found
-        """
-        # Check for candidates
-        if not hasattr(response, 'candidates') or not response.candidates:
-            return None
-
-        candidate = response.candidates[0]
-
-        # Check finish reason for debugging
-        if hasattr(candidate, 'finish_reason'):
-            logger.debug("candidate finish_reason", finish_reason=str(candidate.finish_reason))
-
-        # Check for content
-        if not hasattr(candidate, 'content') or not candidate.content:
-            return None
-
-        # Check for parts
-        if not hasattr(candidate.content, 'parts') or not candidate.content.parts:
-            return None
-
-        # Try to find text in parts (skip thinking blocks)
-        for part in candidate.content.parts:
-            if hasattr(part, 'text') and part.text:
-                logger.info("extracted text from candidate part", length=len(part.text))
-                return part.text
-
-        return None
 
     def _parse_batch_response_line(
         self,
@@ -1688,7 +1543,7 @@ class GeminiSummarizer:
     def _thinking_config_json(
         self, page_count: int, text_size: int, model_name: str
     ) -> Dict[str, Any]:
-        """REST-JSON form of _get_thinking_config's adaptive tiering.
+        """REST-JSON form of the Gemini thinking tiers (Batch lane only).
 
         Batch JSONL requests bypass the SDK config objects, so the same
         three complexity tiers are mirrored in camelCase. Gemini 3.x takes
@@ -1701,82 +1556,6 @@ class GeminiSummarizer:
             return {"thinkingLevel": "MEDIUM"} if is_gemini3 else {"thinkingBudget": 2048}
         return {"thinkingLevel": "HIGH"} if is_gemini3 else {"thinkingBudget": -1}
 
-    def _get_thinking_config(
-        self, page_count: int, text_size: int, model_name: str
-    ) -> types.GenerateContentConfig:
-        """Get thinking configuration based on document complexity
-
-        Gemini 3.x models use thinking_level (MINIMAL/LOW/MEDIUM/HIGH).
-        Gemini 2.5 models use thinking_budget (token count, 0=off, -1=dynamic).
-        Mixing the two in one request causes an error.
-
-        Args:
-            page_count: Number of pages
-            text_size: Character count
-            model_name: Model being used
-
-        Returns:
-            GenerateContentConfig with appropriate thinking settings
-        """
-        is_gemini3 = "3." in model_name or "3-" in model_name
-
-        if page_count <= 10 and text_size <= 30000:
-            # Easy task: Simple agendas, minimal thinking for speed
-            logger.info(
-                "simple document minimal thinking",
-                page_count=page_count,
-                model=model_name
-            )
-            if is_gemini3:
-                thinking = types.ThinkingConfig(
-                    thinking_level=types.ThinkingLevel.MINIMAL
-                )
-            else:
-                thinking = types.ThinkingConfig(thinking_budget=0)
-            return types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=8192,
-                thinking_config=thinking,
-            )
-
-        elif page_count <= 50 and text_size <= 150000:
-            # Medium task: Standard agendas, moderate thinking
-            logger.info(
-                "medium document moderate thinking",
-                page_count=page_count,
-                model=model_name
-            )
-            if is_gemini3:
-                thinking = types.ThinkingConfig(
-                    thinking_level=types.ThinkingLevel.MEDIUM
-                )
-            else:
-                thinking = types.ThinkingConfig(thinking_budget=2048)
-            return types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=8192,
-                thinking_config=thinking,
-            )
-
-        else:
-            # Hard task: Complex documents, full thinking for best quality
-            logger.info(
-                "complex document full thinking",
-                page_count=page_count,
-                model=model_name
-            )
-            if is_gemini3:
-                thinking = types.ThinkingConfig(
-                    thinking_level=types.ThinkingLevel.HIGH
-                )
-            else:
-                thinking = types.ThinkingConfig(thinking_budget=-1)
-            return types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=8192,
-                thinking_config=thinking,
-            )
-
     def _parse_item_response(self, response_text: str) -> Tuple[str, List[str]]:
         """Parse item response into summary and topics
 
@@ -1788,7 +1567,7 @@ class GeminiSummarizer:
             summary = Combined markdown with thinking trace, summary, and citizen impact
             topics = List of canonical topic strings (validated against taxonomy)
         """
-        response_text = response_text.strip()
+        response_text = strip_code_fence(response_text).strip()
 
         try:
             data = json.loads(response_text)
@@ -1934,3 +1713,7 @@ class GeminiSummarizer:
         """
         # Rough estimate: ~2000 chars per page
         return max(1, len(text) // 2000)
+
+
+# Import alias for callers that predate the provider-neutral rename.
+GeminiSummarizer = Summarizer

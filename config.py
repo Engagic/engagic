@@ -90,6 +90,43 @@ class Config:
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Google Gemini API
         self.LLM_API_KEY = os.getenv("LLM_API_KEY")  # Fallback
+        self.OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+        self.ZAI_API_KEY = os.getenv("ZAI_API_KEY")
+
+        # LLM transport (analysis/llm/backends.py). No provider allegiance:
+        # the model follows price x quality. "zai" is the native GLM endpoint
+        # for production volume (2026-09-08: GLM-5.3-flash replaced Gemini
+        # flash-lite at ~4x lower cost); "openrouter" is the bench that
+        # reaches every model with one request shape for the next bake-off;
+        # "gemini" is the native SDK kept for rollback and its Batch lane.
+        self.LLM_BACKEND = os.getenv("ENGAGIC_LLM_BACKEND", "zai").lower()
+        if self.LLM_BACKEND not in ("openrouter", "zai", "gemini"):
+            raise ValueError("ENGAGIC_LLM_BACKEND must be 'openrouter', 'zai', or 'gemini'")
+        # OpenRouter provider routing. ORDER pins named providers (bench
+        # mode: a number measures one known endpoint). SORT, when set, wins
+        # over ORDER and spreads load by "throughput", "price", or "latency"
+        # (volume mode: a single first-party endpoint throttles a key).
+        # QUANTIZATIONS is the floor that keeps a fast mirror honest.
+        def _csv(name: str, default: str) -> tuple:
+            return tuple(
+                part.strip() for part in os.getenv(name, default).split(",") if part.strip()
+            )
+
+        self.OPENROUTER_PROVIDER_ORDER = _csv("ENGAGIC_OPENROUTER_PROVIDER_ORDER", "Z.AI")
+        self.OPENROUTER_PROVIDER_SORT = os.getenv("ENGAGIC_OPENROUTER_PROVIDER_SORT") or None
+        self.OPENROUTER_QUANTIZATIONS = _csv("ENGAGIC_OPENROUTER_QUANTIZATIONS", "bf16,fp16,fp8")
+        # "auto" tiers reasoning effort by document size (see summarizer);
+        # a fixed low/medium/high pins it for every call.
+        self.LLM_REASONING_EFFORT = os.getenv("ENGAGIC_LLM_REASONING_EFFORT", "auto").lower()
+        # Reasoning tokens count against max_tokens on OpenRouter, so the
+        # ceiling must leave room for the think and the answer (bake-off:
+        # GLM starved at 12k, fine at 24k). Gemini bills thinking separately.
+        self.LLM_MAX_OUTPUT_TOKENS = int(
+            os.getenv(
+                "ENGAGIC_LLM_MAX_OUTPUT_TOKENS",
+                "8192" if self.LLM_BACKEND == "gemini" else "24000",
+            )
+        )
 
         # LLM concurrency for batch item processing (default 15 concurrent items)
         # Flash Lite: 4K RPM / 4M TPM - plenty of headroom for parallel calls
@@ -118,7 +155,12 @@ class Config:
         # special meetings only require ~24h posted notice (Brown Act etc.)
         # and batch's worst-case turnaround is 24h -- those summaries must
         # not land after the meeting happened. Everything else batches.
-        self.BATCH_API_ENABLED = os.getenv("ENGAGIC_BATCH_API_ENABLED", "true").lower() == "true"
+        # Gemini-only: the lane has no equivalent on other transports and the
+        # OpenRouter models we run are cheaper on demand than Gemini in batch.
+        self.BATCH_API_ENABLED = (
+            os.getenv("ENGAGIC_BATCH_API_ENABLED", "true").lower() == "true"
+            and self.LLM_BACKEND == "gemini"
+        )
         self.BATCH_URGENT_PAST_DAYS = int(os.getenv("ENGAGIC_BATCH_URGENT_PAST_DAYS", "0"))
         self.BATCH_URGENT_FUTURE_DAYS = int(os.getenv("ENGAGIC_BATCH_URGENT_FUTURE_DAYS", "1"))
         # Batch lane slots are separate from JOB_CONCURRENCY so parked polls
@@ -259,7 +301,14 @@ class Config:
         # Gemini model IDs (overridable via env for A/B or preview swaps)
         # PRIMARY_MODEL is the default workhorse; SMALL_DOC_MODEL kicks in only
         # when USE_FLASH_LITE is true AND the document is below the size cutoff.
-        self.PRIMARY_MODEL = os.getenv("ENGAGIC_PRIMARY_MODEL", "gemini-3.1-flash-lite")
+        # Model ids are backend-native: OpenRouter slugs ("vendor/model") or
+        # Gemini ids. PRIMARY_MODEL default tracks the current price x quality
+        # winner (GLM-5.3-flash, 2026-09-08 bake-off in motioncount).
+        self.PRIMARY_MODEL = os.getenv("ENGAGIC_PRIMARY_MODEL") or {
+            "openrouter": "z-ai/glm-5.3-flash",
+            "zai": "glm-5.3-flash",
+            "gemini": "gemini-3.1-flash-lite",
+        }[self.LLM_BACKEND]
         self.SMALL_DOC_MODEL = os.getenv("ENGAGIC_SMALL_DOC_MODEL", "gemini-2.5-flash-lite")
 
         # Admin authentication
@@ -304,12 +353,16 @@ class Config:
         if self.API_PORT <= 0 or self.API_PORT > 65535:
             raise ValueError("ENGAGIC_PORT must be between 1 and 65535")
 
-        if not any([self.ANTHROPIC_API_KEY, self.GEMINI_API_KEY, self.LLM_API_KEY]):
+        if not self.get_api_key():
             logger.warning("No LLM API key configured - AI features will be disabled")
 
     def get_api_key(self) -> Optional[str]:
-        """Get the appropriate API key for LLM services - prioritize Gemini"""
-        return self.GEMINI_API_KEY or self.LLM_API_KEY or self.ANTHROPIC_API_KEY
+        """API key for the configured LLM backend."""
+        if self.LLM_BACKEND == "openrouter":
+            return self.OPENROUTER_API_KEY
+        if self.LLM_BACKEND == "zai":
+            return self.ZAI_API_KEY
+        return self.GEMINI_API_KEY or self.LLM_API_KEY
 
     def get_postgres_dsn(self) -> str:
         """Build PostgreSQL DSN for asyncpg connection
