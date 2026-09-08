@@ -133,8 +133,10 @@ class Summarizer:
         # changes -- items carry prompts_version so stale summaries are
         # queryable for backfill (v3.1: status-aware transactional policy;
         # v3.2: policy broadened to legislative redlines, fiscal
-        # characterizations, and internal-conflict reconciliation).
-        self.prompts_version = "v3.2"
+        # characterizations, and internal-conflict reconciliation;
+        # v3.3: model swap to GLM-5.3-flash, privacy floor for private
+        # individuals' names and home addresses, sentence budget enforced).
+        self.prompts_version = "v3.3"
 
         if prompts_path is None:
             # Load from package resources (works in installed packages)
