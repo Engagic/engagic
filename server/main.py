@@ -5,9 +5,9 @@ Clean, modular FastAPI application with separation of concerns.
 Routes, services, and utilities are organized into focused modules.
 """
 
+import asyncio
 import logging
-import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import stripe
 from fastapi import FastAPI
@@ -16,7 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from config import config, get_logger
 from database.db_postgres import Database
-from server.rate_limiter import SQLiteRateLimiter
+from server.rate_limiter import get_rate_limiter
 from server.middleware.logging import log_requests
 from server.middleware.metrics import metrics_middleware
 from server.middleware.request_id import RequestIDMiddleware
@@ -49,10 +49,27 @@ async def lifespan(app: FastAPI):
     # Store in app state
     app.state.db = db
 
+    # Populate the shared analytics/platform snapshot before the first visitor
+    # needs it. This runs in the background so health checks and deploy startup
+    # are not held hostage by an aggregate refresh.
+    async def warm_public_metrics() -> None:
+        try:
+            await db.get_platform_metrics()
+            logger.info("warmed public metrics cache")
+        except Exception as exc:
+            logger.warning("failed to warm public metrics cache", error=str(exc))
+
+    metrics_warm_task = asyncio.create_task(warm_public_metrics())
+
     yield
 
     # Shutdown: Close connection pool
     try:
+        if not metrics_warm_task.done():
+            metrics_warm_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await metrics_warm_task
+
         # Log connection count before closing
         active_connections = db.pool.get_size()
         logger.info(
@@ -97,11 +114,7 @@ app.add_middleware(RequestIDMiddleware)  # type: ignore[arg-type]
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Initialize global instances (non-async)
-rate_limiter = SQLiteRateLimiter(
-    db_path=os.path.join(config.DB_DIR, "rate_limits.db"),
-    requests_limit=config.RATE_LIMIT_REQUESTS,
-    window_seconds=config.RATE_LIMIT_WINDOW,
-)
+rate_limiter = get_rate_limiter()
 
 # Initialize Stripe at app startup (not per-request)
 if config.STRIPE_SECRET_KEY:
