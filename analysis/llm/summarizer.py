@@ -337,7 +337,12 @@ class Summarizer:
         cached_context = (
             normalized_shared if cache_name and not self_contained else None
         )
-        input_chars = len(prompt) + len(cached_context or "")
+        system_chars = (
+            len(self._system_instruction(self._select_prompt_type()) or "")
+            if kind == "item"
+            else 0
+        )
+        input_chars = len(prompt) + len(cached_context or "") + system_chars
         input_tokens = max(1, input_chars // 4)
         failure: Dict[str, Any] | None = None
 
@@ -436,6 +441,17 @@ class Summarizer:
         """List-price estimate; callers prefer the provider-reported cost when present."""
         return price_estimate(model_name, input_tokens, output_tokens)
 
+    def _system_instruction(self, prompt_type: str) -> Optional[str]:
+        """Static instruction block for item prompts. It lives in the system
+        message so provider prefix caches cover it (Z.AI keys its implicit
+        cache on the system message; a user-turn prefix never hits)."""
+        prompts = getattr(self, "prompts", None) or {}
+        return (prompts.get("item", {}).get(prompt_type) or {}).get("system_instruction")
+
+    def _response_schema(self, prompt_type: str) -> Optional[dict]:
+        prompts = getattr(self, "prompts", None) or {}
+        return (prompts.get("item", {}).get(prompt_type) or {}).get("response_schema")
+
     def _select_prompt_type(self) -> str:
         """Select prompt type for item summarization.
 
@@ -493,7 +509,9 @@ class Summarizer:
             return
         cost = completion.cost_usd
         if cost is None:
-            cost = self.backend.estimate_cost(completion.input_tokens, completion.output_tokens)
+            cost = self.backend.estimate_cost(
+                completion.input_tokens, completion.output_tokens, completion.cached_tokens
+            )
         self.metrics.record_llm_call(
             model=model_display,
             prompt_type=prompt_type,
@@ -553,6 +571,7 @@ class Summarizer:
                 input_tokens=completion.input_tokens,
                 output_tokens=completion.output_tokens,
                 reasoning_tokens=completion.reasoning_tokens,
+                cached_tokens=completion.cached_tokens,
                 cost_usd=completion.cost_usd,
                 provider=completion.provider,
                 model=model_display,
@@ -611,15 +630,14 @@ class Summarizer:
             effort=effort,
         )
 
-        prompt_spec = self.prompts["item"][prompt_type]
         prompt = self._get_prompt("item", prompt_type, title=item_title, text=text)
         start_time = time.time()
 
         try:
             completion = self.backend.complete(
                 user=prompt,
-                system=prompt_spec.get("system_instruction"),
-                schema=prompt_spec.get("response_schema"),
+                system=self._system_instruction(prompt_type),
+                schema=self._response_schema(prompt_type),
                 effort=effort,
                 max_tokens=config.LLM_MAX_OUTPUT_TOKENS,
                 temperature=0.3,
@@ -638,6 +656,7 @@ class Summarizer:
                 input_tokens=completion.input_tokens,
                 output_tokens=completion.output_tokens,
                 reasoning_tokens=completion.reasoning_tokens,
+                cached_tokens=completion.cached_tokens,
                 cost_usd=completion.cost_usd,
                 provider=completion.provider,
                 finish_reason=completion.finish_reason,
@@ -1374,6 +1393,11 @@ class Summarizer:
                             "generationConfig": generation_config,
                         }
                     }
+                    system_instruction = self._system_instruction(prompt_type)
+                    if system_instruction:
+                        jsonl_line["request"]["systemInstruction"] = {
+                            "parts": [{"text": system_instruction}]
+                        }
 
                     if cache_name and not self_contained:
                         jsonl_line["request"]["cachedContent"] = cache_name

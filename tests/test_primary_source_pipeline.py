@@ -136,7 +136,9 @@ def test_rendered_prompt_is_status_aware():
     with open("analysis/llm/prompts_v3.json") as prompt_file:
         summarizer.prompts = json.load(prompt_file)
 
-    prompt = summarizer._get_prompt(
+    # The policy block lives in the system message (provider prefix cache);
+    # the model sees system + rendered template, so check that whole input.
+    prompt = summarizer._system_instruction("unified") + summarizer._get_prompt(
         "item",
         "unified",
         title="Purchase",

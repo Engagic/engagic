@@ -44,15 +44,18 @@ EFFORT_LEVELS = (EFFORT_LOW, EFFORT_MEDIUM, EFFORT_HIGH)
 # (OpenRouter does; Z.AI and Gemini do not). Confidence 7/10: list prices on
 # 2026-09-08. GLM-5.3-flash is billed at half list through 2026-09-09; the
 # table carries list so the estimate never undershoots after the promo.
-MODEL_PRICING_PER_MILLION: Dict[str, tuple[float, float]] = {
-    "z-ai/glm-5.3-flash": (0.15, 0.50),
-    "glm-5.3-flash": (0.15, 0.50),
-    "glm-5.3": (1.40, 4.40),
-    "google/gemini-3.1-flash-lite": (0.25, 1.50),
-    "gemini-3.1-flash-lite": (0.25, 1.50),
-    "gemini-3.1-flash-lite-preview": (0.25, 1.50),
-    "gemini-2.5-flash-lite": (0.10, 0.40),
-    "gemini-2.5-flash": (0.30, 2.50),
+# Tuple is (input, output, cached input). Z.AI prefix caching is implicit
+# and bills cached prefix tokens at a fifth of list; the prompt is laid out
+# so the instruction block is that prefix.
+MODEL_PRICING_PER_MILLION: Dict[str, tuple[float, float, float]] = {
+    "z-ai/glm-5.3-flash": (0.15, 0.50, 0.03),
+    "glm-5.3-flash": (0.15, 0.50, 0.03),
+    "glm-5.3": (1.40, 4.40, 0.26),
+    "google/gemini-3.1-flash-lite": (0.25, 1.50, 0.025),
+    "gemini-3.1-flash-lite": (0.25, 1.50, 0.025),
+    "gemini-3.1-flash-lite-preview": (0.25, 1.50, 0.025),
+    "gemini-2.5-flash-lite": (0.10, 0.40, 0.01),
+    "gemini-2.5-flash": (0.30, 2.50, 0.03),
 }
 
 _RETRYABLE_HTTP = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
@@ -69,6 +72,7 @@ class Completion:
     input_tokens: int
     output_tokens: int
     reasoning_tokens: int
+    cached_tokens: int
     cost_usd: Optional[float]
     finish_reason: Optional[str]
     latency_seconds: float
@@ -95,7 +99,9 @@ class ChatBackend(Protocol):
 
     def count_tokens(self, text: str) -> int: ...
 
-    def estimate_cost(self, input_tokens: int, output_tokens: int) -> float: ...
+    def estimate_cost(
+        self, input_tokens: int, output_tokens: int, cached_tokens: int = 0
+    ) -> float: ...
 
 
 def strip_code_fence(text: str) -> str:
@@ -103,14 +109,21 @@ def strip_code_fence(text: str) -> str:
     return _FENCE.sub("", text)
 
 
-def price_estimate(model: str, input_tokens: int, output_tokens: int) -> float:
+def price_estimate(
+    model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0
+) -> float:
     rates = MODEL_PRICING_PER_MILLION.get(model)
     if rates is None:
         # Unknown model: charge nothing rather than invent a number. Metrics
         # consumers treat 0 as "unpriced".
         return 0.0
-    input_rate, output_rate = rates
-    return (input_tokens / 1_000_000) * input_rate + (output_tokens / 1_000_000) * output_rate
+    input_rate, output_rate, cached_rate = rates
+    cached = min(cached_tokens, input_tokens)
+    return (
+        ((input_tokens - cached) / 1_000_000) * input_rate
+        + (cached / 1_000_000) * cached_rate
+        + (output_tokens / 1_000_000) * output_rate
+    )
 
 
 def _retry_delay(attempt: int, error_text: str, rate_limited: bool) -> float:
@@ -293,6 +306,7 @@ class OpenAICompatibleBackend:
         finish_reason = choice.get("finish_reason")
         usage = data.get("usage") or {}
         completion_details = usage.get("completion_tokens_details") or {}
+        prompt_details = usage.get("prompt_tokens_details") or {}
         cost = usage.get("cost")
         if not content.strip():
             # A reasoning model that spent its whole budget thinking returns
@@ -310,6 +324,7 @@ class OpenAICompatibleBackend:
             input_tokens=int(usage.get("prompt_tokens") or 0),
             output_tokens=int(usage.get("completion_tokens") or 0),
             reasoning_tokens=int(completion_details.get("reasoning_tokens") or 0),
+            cached_tokens=int(prompt_details.get("cached_tokens") or 0),
             cost_usd=float(cost) if cost is not None else None,
             finish_reason=finish_reason,
             latency_seconds=time.monotonic() - started,
@@ -321,8 +336,10 @@ class OpenAICompatibleBackend:
         # for a ceiling check.
         return max(1, len(text) // 3)
 
-    def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
-        return price_estimate(self.model, input_tokens, output_tokens)
+    def estimate_cost(
+        self, input_tokens: int, output_tokens: int, cached_tokens: int = 0
+    ) -> float:
+        return price_estimate(self.model, input_tokens, output_tokens, cached_tokens)
 
 
 class OpenRouterBackend(OpenAICompatibleBackend):
@@ -493,6 +510,7 @@ class GeminiBackend:
             input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
             output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
             reasoning_tokens=int(getattr(usage, "thoughts_token_count", 0) or 0),
+            cached_tokens=int(getattr(usage, "cached_content_token_count", 0) or 0),
             cost_usd=None,
             finish_reason=self._finish_reason(response),
             latency_seconds=time.monotonic() - started,
@@ -565,8 +583,10 @@ class GeminiBackend:
             raise ValueError("Gemini token counter returned no total_tokens")
         return int(total)
 
-    def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
-        return price_estimate(self.model, input_tokens, output_tokens)
+    def estimate_cost(
+        self, input_tokens: int, output_tokens: int, cached_tokens: int = 0
+    ) -> float:
+        return price_estimate(self.model, input_tokens, output_tokens, cached_tokens)
 
 
 def build_backend(api_key: Optional[str] = None) -> ChatBackend:
