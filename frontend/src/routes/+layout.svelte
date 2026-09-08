@@ -17,14 +17,15 @@
 	const selfNavPaths = $derived(
 		$page.url.pathname.startsWith('/about/') ||
 		$page.url.pathname === '/' ||
-		$page.url.pathname === '/country'
+		$page.url.pathname === '/country' ||
+		$page.url.pathname === '/atlas'
 	);
 
 	// Determine if this is a city or meeting page for topographic background
 	const isTopoPage = $derived(() => {
 		const path = $page.url.pathname;
 		// Exclude known non-city routes
-		if (path === '/' || path === '/country' || path.startsWith('/about/') ||
+		if (path === '/' || path === '/country' || path === '/atlas' || path.startsWith('/about/') ||
 			path.startsWith('/dashboard') || path.startsWith('/login') ||
 			path.startsWith('/signup') || path.startsWith('/state/') ||
 			path.startsWith('/matter/') || path.startsWith('/search')) {
