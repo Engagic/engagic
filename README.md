@@ -68,7 +68,7 @@ Engagic fetches meeting agendas from civic tech platforms (Legistar, PrimeGov, G
 │  │              ▼                                    ▼                    │ │
 │  │  ┌───────────────────────┐          ┌─────────────────────────────┐   │ │
 │  │  │  Vendors (19)         │          │  Analysis (LLM)             │   │ │
-│  │  │  - Legistar (110)     │          │  - Gemini 2.5 Flash/Lite    │   │ │
+│  │  │  - Legistar (110)     │          │  - GLM-5.3-flash (Z.AI)     │   │ │
 │  │  │  - Granicus (467)     │          │  - Adaptive prompting (v3)  │   │ │
 │  │  │  - PrimeGov (64)      │          │  - 16 topic taxonomy        │   │ │
 │  │  │  - IQM2 (45)          │          │  - Batch processing (50%)   │   │ │
@@ -106,7 +106,7 @@ Engagic fetches meeting agendas from civic tech platforms (Legistar, PrimeGov, G
 | [vendors/](vendors/README.md) | ~15,300 | 22 async adapters for Legistar, Granicus, PrimeGov, IQM2, NovusAgenda, CivicClerk, CivicPlus, CivicEngage, CivicWeb, eScribe, Municode, OnBase, ProudCity, Vision Internet, WP Events, AgendaOnline, BoardBook, Destiny, Berkeley, Chicago, Menlo Park, Ross. HTML parsers, PDF chunker (1749 lines), rate limiting, vendor-agnostic ID contract. |
 | [database/](database/README.md) | ~8,300 | PostgreSQL with 14 async repositories (jurisdictions, meetings, items, matters, queue, search, userland, council_members, committees, engagement, feedback, deliberation, happening, helpers). asyncpg connection pooling, UPSERT preservation, normalized topics. |
 | [pipeline/](pipeline/README.md) | ~3,900 | Conductor orchestration with dual loops: Fetcher (24h sync) and Processor (continuous queue). Orchestrators for business logic (MeetingSyncOrchestrator, EnqueueDecider, MatterFilter, VoteProcessor). |
-| [analysis/](analysis/README.md) | ~2,300 | Gemini API integration with reactive rate limiting, unified adaptive prompting, 16-topic taxonomy, batch processing (50% cost savings), context caching. |
+| [analysis/](analysis/README.md) | ~2,300 | Provider-neutral LLM backends (Z.AI GLM native, OpenRouter bench, Gemini rollback), unified adaptive prompting, 16-topic taxonomy. |
 | [server/](server/README.md) | ~8,100 | FastAPI with 17 route modules (search, meetings, topics, matters, votes, committees, auth, dashboard, engagement, feedback, deliberation, flyer, donate, admin, monitoring, events, happening). Tiered rate limiting, JWT sessions. |
 | [userland/](userland/README.md) | ~2,500 | Civic alerts: magic link auth, weekly digests (Sundays 9am), dual-track matching (keyword + matter-based), Mailgun delivery. |
 | [parsing/](parsing/README.md) | ~1,200 | PDF extraction: PyMuPDF primary, OCR fallback (Tesseract), legislative formatting detection ([DELETED]/[ADDED]), participation info parsing (emails, phones, Zoom links). |
@@ -199,7 +199,7 @@ Engagic fetches meeting agendas from civic tech platforms (Legistar, PrimeGov, G
 - Python 3.13+
 - PostgreSQL 14+
 - Node.js 18+
-- Google Gemini API key
+- Z.AI API key (or OpenRouter / Gemini, see ENGAGIC_LLM_BACKEND)
 
 ### Backend
 
@@ -208,7 +208,7 @@ Engagic fetches meeting agendas from civic tech platforms (Legistar, PrimeGov, G
 uv sync
 
 # Set environment variables
-export GEMINI_API_KEY="your-key"
+export ZAI_API_KEY="your-key"  # or OPENROUTER_API_KEY / GEMINI_API_KEY with ENGAGIC_LLM_BACKEND
 export POSTGRES_HOST="localhost"
 export POSTGRES_DB="engagic"
 export POSTGRES_USER="engagic"
@@ -249,7 +249,7 @@ npm run dev  # localhost:5173
 
 ## Stack
 
-Python 3.13, FastAPI, PostgreSQL, asyncpg, BeautifulSoup, PyMuPDF, Google Gemini, SvelteKit, Cloudflare Pages
+Python 3.13, FastAPI, PostgreSQL, asyncpg, BeautifulSoup, PyMuPDF, GLM-5.3-flash via Z.AI, SvelteKit, Cloudflare Pages
 
 ---
 

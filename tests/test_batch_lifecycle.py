@@ -21,11 +21,31 @@ from pipeline.protocols import NullMetrics
 from pipeline.utils import meeting_work_version
 
 
+class _ClientCountingBackend:
+    """Gemini-shaped backend double: token counts come from whatever
+    summarizer.client the test installs later."""
+
+    name = "gemini"
+    model = "gemini-test"
+    supports_context_cache = True
+    supports_batch = True
+
+    def __init__(self, summarizer: GeminiSummarizer):
+        self._summarizer = summarizer
+
+    def count_tokens(self, text: str) -> int:
+        response = self._summarizer.client.models.count_tokens(
+            model=self.model, contents=text
+        )
+        return int(response.total_tokens)
+
+
 def make_summarizer() -> GeminiSummarizer:
     """Build the narrow unit under test without constructing a real SDK client."""
     summarizer = GeminiSummarizer.__new__(GeminiSummarizer)
     summarizer.primary_model = "gemini-test"
     summarizer.prompts_version = "v-test"
+    summarizer.backend = _ClientCountingBackend(summarizer)
     summarizer._batch_sdk_semaphore = asyncio.Semaphore(BATCH_SDK_CONCURRENCY)
     summarizer._batch_submit_semaphore = asyncio.Semaphore(BATCH_SUBMIT_CONCURRENCY)
     summarizer._get_prompt = lambda *args, **kwargs: kwargs.get("text", "")

@@ -1,29 +1,30 @@
 # Analysis Module - LLM Intelligence & Topic Extraction
 
-**Transform raw meeting documents into actionable civic intelligence.** Async orchestration, Gemini API integration, adaptive prompting, topic normalization.
+**Transform raw meeting documents into actionable civic intelligence.** Async orchestration, provider-neutral LLM backends, adaptive prompting, topic normalization.
 
 ---
 
 ## Overview
 
-The analysis module provides LLM-powered intelligence for civic meeting documents. Orchestrates Google's Gemini API to generate summaries, extract topics, and assess citizen impact from agenda items and meeting packets.
+The analysis module provides LLM-powered intelligence for civic meeting documents. Drives a ChatBackend (Z.AI GLM by default; OpenRouter and Gemini selectable) to generate summaries, extract topics, and assess citizen impact from agenda items and meeting packets.
 
 **Core Capabilities:**
 - **Async orchestration:** Concurrent PDF downloads, semaphore-limited LLM calls
-- **Reactive rate limiting:** Respects Gemini's `retryDelay` on 429 errors with exponential backoff
+- **Reactive rate limiting:** Respects provider retry hints on 429 errors with exponential backoff
 - **Unified adaptive prompting:** Single prompt with four classification levels lets the LLM scale output depth to consequence (2-20 sentences)
 - **Topic extraction:** 16 canonical civic topics (housing, zoning, transportation, etc.)
 - **Citizen impact assessment:** "Why should residents care?" analysis
-- **Batch processing:** 50% cost savings via Gemini Batch API (JSONL file method)
+- **Backends:** `analysis/llm/backends.py` -- `zai` (native GLM, production), `openrouter` (bench for bake-offs), `gemini` (rollback; the only backend with a Batch lane)
 - **JSON structured output:** Schema-validated responses (no parsing failures)
 
-**Architecture Pattern:** AsyncAnalyzer (orchestration) → GeminiSummarizer (LLM + rate limiting) → TopicNormalizer (mapping)
+**Architecture Pattern:** AsyncAnalyzer (orchestration) → Summarizer (prompts + effort tiers + parsing) → ChatBackend (transport) → TopicNormalizer (mapping)
 
 ```
 analysis/
 ├── analyzer_async.py       # 428 lines - Async orchestration
 ├── llm/
-│   ├── summarizer.py       # 1,309 lines - Gemini API + reactive rate limiting
+│   ├── summarizer.py       # prompts, effort tiers, parsing, Gemini batch lane
+│   ├── backends.py         # ChatBackend protocol: ZaiBackend, OpenRouterBackend, GeminiBackend
 │   ├── prompts_v2.json     # 82 lines - Legacy prompt template (retained for reference)
 │   └── prompts_v3.json     # 61 lines - Active prompt with 4 classification levels + 7 worked examples
 └── topics/
@@ -163,7 +164,7 @@ await analyzer.close()  # Cleanup HTTP session
 
 ---
 
-### GeminiSummarizer (analysis/llm/summarizer.py)
+### Summarizer (analysis/llm/summarizer.py; `GeminiSummarizer` is an import alias)
 
 **Gemini API orchestration** with config-driven model selection, unified adaptive prompting, reactive rate limiting, and batch processing.
 
