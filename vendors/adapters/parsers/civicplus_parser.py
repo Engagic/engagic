@@ -17,7 +17,7 @@ Each item div contains:
 """
 
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -199,3 +199,68 @@ def parse_civicplus_html(html: str, base_url: str) -> Dict[str, Any]:
         'items': pipeline_items,
         'html_pattern': 'civicplus_flat' if is_flat_layout else 'civicplus_hierarchical',
     }
+
+
+# Some CivicPlus sites publish the HTML "agenda" as a document catalog: a
+# heading per document group ("Agenda Packet", "Staff Reports") rather than
+# a heading per agenda item. Antioch CA is the canonical case: one 868-page
+# packet under the first heading and one staff-report PDF per item under the
+# second, with the agenda number and title carried in each filename
+# ("4A  CONSENT CALENDAR    APPROVAL OF COUNCIL WARRANTS.pdf"). Those files
+# ARE the items; the packet is the meeting's packet_url and must never be
+# summarized as an item of its own.
+CATALOG_TITLE_RE = re.compile(
+    r"^(agenda\s+packet|staff\s+reports?|documents?|packet|attachments?"
+    r"|supporting\s+documents?|meeting\s+materials?|agenda)$",
+    re.IGNORECASE,
+)
+PACKET_NAME_RE = re.compile(r"agenda\s*packet|[-_ ]packet\.pdf$|^\d{6}-packet", re.IGNORECASE)
+# "4A  CONSENT CALENDAR    APPROVAL OF ..." -- number, two or more spaces, title
+CATALOG_FILENAME_RE = re.compile(
+    r"^\s*(?P<number>\d{1,3}[A-Za-z]?|[A-Z]{1,2}\d{0,2})\s{2,}(?P<title>.+?)(?:\.pdf)?\s*$",
+    re.IGNORECASE,
+)
+_FILE_ID_RE = re.compile(r"fileID=(\d+)", re.IGNORECASE)
+CATALOG_MIN_PARSED_RATIO = 0.6
+
+
+def explode_document_catalog(items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Turn a document-catalog agenda into per-file items.
+
+    Returns {'items': [...], 'packet_url': str | None} when every parsed item
+    is a catalog heading and at least one heading holds two or more files
+    whose names carry an agenda number. Returns None for a real agenda.
+    """
+    if not items or not all(CATALOG_TITLE_RE.match((item.get("title") or "").strip()) for item in items):
+        return None
+
+    packet_url: Optional[str] = None
+    candidate_files: List[Dict[str, Any]] = []
+    for item in items:
+        for attachment in item.get("attachments", []):
+            name = attachment.get("name") or ""
+            if PACKET_NAME_RE.search(name) or PACKET_NAME_RE.search(item.get("title") or ""):
+                packet_url = packet_url or attachment.get("url")
+                continue
+            candidate_files.append(attachment)
+
+    parsed = [(CATALOG_FILENAME_RE.match(f.get("name") or ""), f) for f in candidate_files]
+    matched = [(m, f) for m, f in parsed if m]
+    if len(matched) < 2 or len(matched) < CATALOG_MIN_PARSED_RATIO * len(candidate_files):
+        return None
+
+    exploded: List[Dict[str, Any]] = []
+    for sequence, (match, attachment) in enumerate(matched, start=1):
+        number = match.group("number").upper()
+        title = re.sub(r"\s+", " ", match.group("title")).strip()
+        file_id = _FILE_ID_RE.search(attachment.get("url") or "")
+        exploded.append(
+            {
+                "vendor_item_id": file_id.group(1) if file_id else f"{number}-{sequence}",
+                "title": title or f"Item {number}",
+                "sequence": sequence,
+                "agenda_number": number,
+                "attachments": [attachment],
+            }
+        )
+    return {"items": exploded, "packet_url": packet_url}

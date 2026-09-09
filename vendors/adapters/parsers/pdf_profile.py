@@ -25,6 +25,8 @@ from typing import Any, Dict, List
 
 import fitz
 
+from vendors.adapters.parsers.pdf_links import page_links
+
 # Agenda structure lives in the front pages. Links beyond this range are
 # attachment-internal (staff report citations, budget table references).
 LINK_SCAN_PAGES = 15
@@ -104,7 +106,7 @@ def profile_doc(doc: fitz.Document) -> PdfProfile:
     for i in range(scan_limit):
         page = doc[i]
 
-        for link in page.get_links():
+        for link in page_links(page):
             kind = link.get("kind")
             if kind == fitz.LINK_URI:
                 p.external_links += 1

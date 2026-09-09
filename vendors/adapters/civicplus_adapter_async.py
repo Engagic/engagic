@@ -28,7 +28,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from vendors.adapters.base_adapter_async import AsyncBaseAdapter, logger
-from vendors.adapters.parsers.civicplus_parser import parse_civicplus_html
+from vendors.adapters.parsers.civicplus_parser import explode_document_catalog, parse_civicplus_html
 from pipeline.protocols import MetricsCollector
 from exceptions import VendorHTTPError
 from config import config
@@ -675,6 +675,23 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
         if '/ViewFile/Agenda/' in packet_url:
             items = await self._try_html_agenda(packet_url, vendor_id)
             if items:
+                # Step 1a: a document catalog (headings per document group,
+                # items encoded in staff-report filenames) explodes into one
+                # item per file; the packet becomes packet_url, never an item.
+                catalog = explode_document_catalog(items)
+                if catalog:
+                    meeting["items"] = catalog["items"]
+                    if catalog["packet_url"]:
+                        meeting["packet_url"] = catalog["packet_url"]
+                    logger.info(
+                        "document catalog agenda exploded into per-file items",
+                        vendor="civicplus",
+                        slug=self.slug,
+                        vendor_id=vendor_id,
+                        catalog_headings=len(items),
+                        items=len(catalog["items"]),
+                    )
+                    return
                 # Step 1b: Check for monolithic packet pattern — HTML items
                 # exist with good structure but no per-item attachments, and
                 # one "item" is actually the full agenda packet PDF.

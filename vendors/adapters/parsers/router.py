@@ -45,6 +45,7 @@ OPEN_FAILED = "open_failed"        # fitz cannot open the file
 ENCRYPTED = "encrypted"            # password-protected
 NO_TEXT_LAYER = "no_text_layer"    # scanned/image-only, nothing to anchor on
 NO_ITEMS = "no_items"              # parsed fine, no item structure found
+DEGENERATE = "degenerate_single_item"  # one item swallowed a long document
 ENGINE_ERROR = "engine_error"      # chunker raised
 TIMEOUT = "timeout"                # guard killed a wedged/runaway chunk (set by dispatch)
 DEFERRED = "deferred_to_processing"  # sync archived the bytes; the processor manufactures shape
@@ -258,6 +259,20 @@ class ChunkResult:
                 for a in self.attempts
             ],
         }
+
+
+# One item is a legitimate result for a short notice; for a long document it
+# means the engine found no boundaries and returned everything as one blob.
+DEGENERATE_MIN_PAGES = 10
+DEGENERATE_MIN_BODY_CHARS = 50_000
+
+
+def _is_degenerate(items: List[Dict[str, Any]], profile: Optional[PdfProfile]) -> bool:
+    if len(items) != 1:
+        return False
+    body_chars = len(items[0].get("body_text") or "")
+    page_count = profile.page_count if profile else 0
+    return page_count >= DEGENERATE_MIN_PAGES or body_chars >= DEGENERATE_MIN_BODY_CHARS
 
 
 def _run_rung(rung: str, pdf_path: str) -> Dict[str, Any]:
@@ -578,6 +593,22 @@ def chunk_pdf(
             duration_ms=elapsed_ms,
         )
         result.attempts.append(attempt)
+
+        if items and _is_degenerate(items, result.profile):
+            # A junk bookmark tree (file-stem codes, structure tags leaked
+            # from embedded flyers) makes the TOC rung emit one item that
+            # is the whole packet. Accepting it stops the cascade before
+            # the rungs that would have found the agenda. Antioch CA:
+            # 236 pages, 144 bookmarks, one item of 869k chars.
+            attempt.failure_reason = DEGENERATE
+            logger.info(
+                "chunk rung rejected as degenerate",
+                rung=rung,
+                parse_method=parse_method,
+                body_chars=len(items[0].get("body_text") or ""),
+                page_count=result.profile.page_count if result.profile else None,
+            )
+            continue
 
         if items:
             # Quality signals, by failure layer: garbage titles = extraction

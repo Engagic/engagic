@@ -23,6 +23,8 @@ Usage:
 """
 
 import fitz
+
+from vendors.adapters.parsers.pdf_links import page_links
 import re
 import json
 from collections import Counter
@@ -285,7 +287,7 @@ def _normalize_link_url(uri: str) -> str:
 def _extract_links(page):
     """Extract all URI links from a page."""
     links = []
-    for link in page.get_links():
+    for link in page_links(page):
         if link.get("kind") != 2:
             continue
         uri = link.get("uri", "")
@@ -620,7 +622,7 @@ def _has_structural_toc(doc):
 
 def _has_attachment_links(doc):
     for page in doc:
-        for link in page.get_links():
+        for link in page_links(page):
             if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
                 return True
     return False
