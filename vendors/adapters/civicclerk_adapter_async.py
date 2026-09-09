@@ -63,7 +63,7 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
         for event in events:
             meeting_tasks.append(self._process_event(event))
 
-        processed_meetings = await asyncio.gather(*meeting_tasks, return_exceptions=True)
+        processed_meetings = await self._bounded_gather(meeting_tasks, max_concurrent=5, return_exceptions=True)
 
         # Filter out errors
         results = []

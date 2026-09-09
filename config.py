@@ -144,6 +144,23 @@ class Config:
         # pushing higher; the dominant memory cost is in-flight PDF bytes.
         self.JOB_CONCURRENCY = int(os.getenv("ENGAGIC_JOB_CONCURRENCY", "6"))
 
+        # Memory admission gate (parsing/memory_budget.py). Extraction
+        # subprocesses and large downloads wait until the kernel reports this
+        # much MemAvailable, for at most WAIT seconds, then proceed anyway.
+        # Per-unit caps are individually safe and collectively unbounded;
+        # this is the aggregate budget.
+        self.EXTRACTION_MIN_AVAILABLE_BYTES = (
+            int(os.getenv("ENGAGIC_EXTRACTION_MIN_AVAILABLE_MB", "700")) * 1024 * 1024
+        )
+        self.EXTRACTION_MEMORY_WAIT_SECONDS = float(
+            os.getenv("ENGAGIC_EXTRACTION_MEMORY_WAIT_SECONDS", "120")
+        )
+        # Downloads above this size are gated on 2x their length plus the
+        # floor before the body is read into memory.
+        self.DOWNLOAD_MEMORY_GATE_BYTES = (
+            int(os.getenv("ENGAGIC_DOWNLOAD_MEMORY_GATE_MB", "32")) * 1024 * 1024
+        )
+
         # Per-job wall-clock ceiling. Exists to prevent a hung LLM call or
         # aiohttp cleanup from pinning a queue slot indefinitely. PDF subprocess
         # extraction already caps itself at 620s; a meeting with 2-3 timed-out

@@ -453,7 +453,7 @@ class AsyncLegistarAdapter(AsyncBaseAdapter):
             for item_data in event_items:
                 item_tasks.append(self._process_api_item(item_data))
 
-            processed_items = await asyncio.gather(*item_tasks, return_exceptions=True)
+            processed_items = await self._bounded_gather(item_tasks, max_concurrent=5, return_exceptions=True)
 
             # Filter out errors
             items = []

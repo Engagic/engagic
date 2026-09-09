@@ -136,7 +136,7 @@ class AsyncWPEventsAdapter(AsyncBaseAdapter):
 
         # Enrich each event with media attachments (concurrent)
         tasks = [self._enrich_event(e) for e in events]
-        enriched = await asyncio.gather(*tasks, return_exceptions=True)
+        enriched = await self._bounded_gather(tasks, max_concurrent=5, return_exceptions=True)
 
         results = []
         for idx, meeting in enumerate(enriched):

@@ -254,7 +254,7 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                     if meeting.get("packet_url") and not meeting.get("items")
                 ]
                 if pdf_tasks:
-                    await asyncio.gather(*pdf_tasks, return_exceptions=True)
+                    await self._bounded_gather(pdf_tasks, max_concurrent=4, return_exceptions=True)
 
             logger.info(
                 "filtered meetings in date range",

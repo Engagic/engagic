@@ -27,6 +27,7 @@ import aiohttp
 
 from corpus.store import get_corpus
 from exceptions import DocumentDownloadError, ExtractionError, LLMError
+from parsing.memory_budget import wait_for_memory_async
 from parsing.pdf import PdfExtractor, extract_document_file
 from parsing.subprocess_guard import GuardCrashed, GuardTaskError, GuardTimeout, run_guarded
 from parsing.participation import parse_participation_info
@@ -401,6 +402,14 @@ class AsyncAnalyzer:
                                 await self._sleep_download_retry(attempt, retry_after)
                                 continue
                             raise error
+                        content_length = int(resp.headers.get("Content-Length") or 0)
+                        if content_length > config.DOWNLOAD_MEMORY_GATE_BYTES:
+                            # The body, its temp-file copy, and the archive
+                            # upload overlap in memory; wait for room rather
+                            # than stack eight large packets at once.
+                            await wait_for_memory_async(
+                                content_length * 2 + config.EXTRACTION_MIN_AVAILABLE_BYTES
+                            )
                         raw_bytes = await resp.read()
                         content_type = resp.headers.get("Content-Type", "")
                         return DocumentResponse(

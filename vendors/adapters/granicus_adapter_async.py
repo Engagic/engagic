@@ -418,7 +418,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
             for meeting_data in meetings_in_range
         ]
 
-        results = await asyncio.gather(*detail_tasks, return_exceptions=True)
+        results = await self._bounded_gather(detail_tasks, max_concurrent=5, return_exceptions=True)
 
         meetings = []
         for i, result in enumerate(results):
@@ -783,7 +783,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 logger.debug("failed to fetch item attachments", vendor="granicus", slug=self.slug, item_id=item_id, error=str(e))
             return item
 
-        return list(await asyncio.gather(*[fetch_item_attachments(item) for item in items]))
+        return list(await self._bounded_gather([fetch_item_attachments(item) for item in items], max_concurrent=4, return_exceptions=False))
 
     def _parse_agendaonline_attachments(self, html: str, base_host: str) -> List[Dict[str, Any]]:
         """Parse attachment links from AgendaOnline item detail page.
@@ -917,7 +917,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
 
             return item
 
-        return list(await asyncio.gather(*[extract_from_pdf(item) for item in items]))
+        return list(await self._bounded_gather([extract_from_pdf(item) for item in items], max_concurrent=4, return_exceptions=False))
 
     async def _fetch_questys_attachments(
         self, items: List[Dict[str, Any]], event_id: Optional[str] = None
@@ -978,7 +978,7 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                     )
                 return item
 
-        return list(await asyncio.gather(*[resolve_item(item) for item in items]))
+        return list(await self._bounded_gather([resolve_item(item) for item in items], max_concurrent=4, return_exceptions=False))
 
     @staticmethod
     def _get_pdf_link_text(page, link_rect) -> str:

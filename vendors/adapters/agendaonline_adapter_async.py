@@ -124,7 +124,7 @@ class AsyncAgendaOnlineAdapter(AsyncBaseAdapter):
 
         # Fetch agenda details concurrently
         tasks = [self._fetch_meeting_detail(ref) for ref in meeting_refs]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await self._bounded_gather(tasks, max_concurrent=5, return_exceptions=True)
 
         meetings = []
         for idx, result in enumerate(results):
@@ -312,7 +312,7 @@ class AsyncAgendaOnlineAdapter(AsyncBaseAdapter):
                     )
                 return item
 
-        return list(await asyncio.gather(*[fetch_item(i) for i in items]))
+        return list(await self._bounded_gather([fetch_item(i) for i in items], max_concurrent=4, return_exceptions=False))
 
     def _parse_attachments(self, html: str) -> List[Dict[str, Any]]:
         soup = BeautifulSoup(html, "html.parser")

@@ -406,7 +406,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                     if chunked:
                         meeting["items"] = chunked
 
-        await asyncio.gather(*[enrich_meeting(m) for m in filtered])
+        await self._bounded_gather([enrich_meeting(m) for m in filtered], max_concurrent=4, return_exceptions=False)
 
         # Clean up internal fields
         for meeting in filtered:
@@ -789,7 +789,7 @@ class AsyncMunicodeAdapter(AsyncBaseAdapter):
                         if chunked:
                             meeting["items"] = chunked
 
-            await asyncio.gather(*[enrich_meeting(m) for m in filtered])
+            await self._bounded_gather([enrich_meeting(m) for m in filtered], max_concurrent=4, return_exceptions=False)
 
             # Clean up internal fields
             for meeting in filtered:
