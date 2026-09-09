@@ -163,10 +163,12 @@ class Config:
 
         # Per-job wall-clock ceiling. Exists to prevent a hung LLM call or
         # aiohttp cleanup from pinning a queue slot indefinitely. PDF subprocess
-        # extraction already caps itself at 620s; a meeting with 2-3 timed-out
-        # PDFs plus healthy LLM summarization fits comfortably under 25 min.
-        # Exceeding this marks the queue row failed and the worker moves on.
-        self.JOB_TIMEOUT_SECONDS = int(os.getenv("ENGAGIC_JOB_TIMEOUT_SECONDS", "1500"))
+        # extraction caps itself per document at up to 2400s (scaled by page
+        # count, see analysis/analyzer_async.extraction_timeout_for) and runs
+        # documents concurrently, so a packet with one monster scan plus LLM
+        # summarization fits under 50 min. Exceeding this marks the queue row
+        # failed and the worker moves on.
+        self.JOB_TIMEOUT_SECONDS = int(os.getenv("ENGAGIC_JOB_TIMEOUT_SECONDS", "3000"))
 
         # Gemini Batch API lane. Meeting jobs whose date falls outside the
         # urgent window [now - PAST_DAYS, now + FUTURE_DAYS] go through the

@@ -117,19 +117,38 @@ _ESCAPED_ARRAY_RE = re.compile(r'("topics"\s*:\s*\[)(.*?)(\])', re.S)
 
 
 def parse_json_lenient(text: str) -> Any:
-    """json.loads with one targeted repair for a known open-model quirk."""
+    """json.loads with two targeted repairs for known open-model quirks.
+
+    1. Escaped delimiters inside the topics array ("topics": [\\"budget\\"]).
+    2. Stray characters outside the object (a lone backtick after the closing
+       brace, a preamble before the opening one). The object itself is kept
+       byte-for-byte; only what lies outside its outermost braces is cut.
+    """
     try:
         return json.loads(text)
-    except json.JSONDecodeError as first_error:
-        repaired = _ESCAPED_ARRAY_RE.sub(
-            lambda m: m.group(1) + m.group(2).replace('\\"', '"') + m.group(3), text
+    except json.JSONDecodeError as exc:
+        first_error = exc
+    candidates = []
+    repaired = _ESCAPED_ARRAY_RE.sub(
+        lambda m: m.group(1) + m.group(2).replace('\\"', '"') + m.group(3), text
+    )
+    if repaired != text:
+        candidates.append(repaired)
+    start, end = text.find("{"), text.rfind("}")
+    if start >= 0 and end > start and (start > 0 or end < len(text.rstrip()) - 1):
+        trimmed = text[start : end + 1]
+        candidates.append(trimmed)
+        trimmed_repaired = _ESCAPED_ARRAY_RE.sub(
+            lambda m: m.group(1) + m.group(2).replace('\\"', '"') + m.group(3), trimmed
         )
-        if repaired == text:
-            raise
+        if trimmed_repaired != trimmed:
+            candidates.append(trimmed_repaired)
+    for candidate in candidates:
         try:
-            return json.loads(repaired)
+            return json.loads(candidate)
         except json.JSONDecodeError:
-            raise first_error
+            continue
+    raise first_error
 
 
 def price_estimate(

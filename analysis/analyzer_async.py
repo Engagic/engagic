@@ -24,6 +24,7 @@ from typing import AsyncIterator, List, Dict, Any, Optional, Tuple, cast
 from urllib.parse import urljoin
 
 import aiohttp
+import fitz
 
 from corpus.store import get_corpus
 from exceptions import DocumentDownloadError, ExtractionError, LLMError
@@ -53,8 +54,30 @@ from config import config, get_logger
 
 logger = get_logger(__name__).bind(component="pipeline")
 
+# Extraction time scales with pages, and since OCR streams in bounded chunks
+# an 889-page scan is a normal document rather than a crash (measured 514s,
+# ~0.58s/page). The guard therefore scales too: a floor for small files, a
+# per-page allowance with ~2.5x headroom over the measured rate, and a hard
+# ceiling that still fits under the job timeout. Page count comes from the
+# PDF trailer, which is cheap to read in the parent before spawning.
 DOCUMENT_EXTRACTION_TIMEOUT_SECONDS = 600
+DOCUMENT_EXTRACTION_SECONDS_PER_PAGE = 1.5
+DOCUMENT_EXTRACTION_BASE_SECONDS = 300
+DOCUMENT_EXTRACTION_MAX_SECONDS = 2400
 DOCUMENT_EXTRACTION_OUTER_GRACE_SECONDS = 20
+
+
+def extraction_timeout_for(document_path: str) -> float:
+    """Guard timeout sized to the document's page count."""
+    if not document_path.lower().endswith(".pdf"):
+        return DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
+    try:
+        with fitz.open(document_path) as doc:
+            pages = len(doc)
+    except Exception:  # Unreadable trailer: the child will report the real error
+        return DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
+    scaled = DOCUMENT_EXTRACTION_BASE_SECONDS + DOCUMENT_EXTRACTION_SECONDS_PER_PAGE * pages
+    return float(min(DOCUMENT_EXTRACTION_MAX_SECONDS, max(DOCUMENT_EXTRACTION_TIMEOUT_SECONDS, scaled)))
 
 
 def _extract_best_pdf_link(html_bytes: bytes, base_url: str) -> Optional[str]:
@@ -92,15 +115,18 @@ def _extract_pdf_in_subprocess(document_path, ocr_threshold, ocr_dpi,
         max_ocr_workers,
     )
     started = time.monotonic()
+    timeout_seconds = extraction_timeout_for(document_path)
     try:
         return run_guarded(
             extract_document_file,
             args,
-            timeout=DOCUMENT_EXTRACTION_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
             rlimit_bytes=int(1.5 * 1024 * 1024 * 1024),
         )
     except GuardTimeout:
-        raise ExtractionError("Document extraction subprocess timed out after 600s")
+        raise ExtractionError(
+            f"Document extraction subprocess timed out after {timeout_seconds:.0f}s"
+        )
     except GuardCrashed as e:
         # Drawing inspection is the highest-risk native MuPDF operation in
         # this path. Some otherwise readable, graphics-heavy PDFs crash there
@@ -109,10 +135,7 @@ def _extract_pdf_in_subprocess(document_path, ocr_threshold, ocr_dpi,
         if detect_legislative_formatting and document_path.lower().endswith(".pdf"):
             remaining_timeout = max(
                 1,
-                math.ceil(
-                    DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
-                    - (time.monotonic() - started)
-                ),
+                math.ceil(timeout_seconds - (time.monotonic() - started)),
             )
             logger.warning(
                 "guarded PDF extraction crashed; retrying without legislative geometry",
@@ -593,8 +616,9 @@ class AsyncAnalyzer:
                     temporary.write(artifact.data)
                 # The guarded child reopens the tempfile. Retaining the immutable
                 # artifact here would keep a second full document copy resident
-                # in the parent for the child's entire (up to 620s) lifetime.
+                # in the parent for the child's entire lifetime.
                 del artifact
+                extraction_timeout = extraction_timeout_for(document_path)
                 result = await asyncio.wait_for(
                     asyncio.to_thread(
                         _extract_pdf_in_subprocess,
@@ -604,13 +628,14 @@ class AsyncAnalyzer:
                         self.pdf_extractor.detect_legislative_formatting,
                         self.pdf_extractor.max_ocr_workers,
                     ),
-                    timeout=(
-                        DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
-                        + DOCUMENT_EXTRACTION_OUTER_GRACE_SECONDS
-                    ),
+                    timeout=extraction_timeout + DOCUMENT_EXTRACTION_OUTER_GRACE_SECONDS,
                 )
             except asyncio.TimeoutError:
-                logger.error("document extraction timed out", url=safe_url[:100])
+                logger.error(
+                    "document extraction timed out",
+                    url=safe_url[:100],
+                    timeout_seconds=extraction_timeout,
+                )
                 raise ExtractionError(
                     f"Document extraction timed out: {safe_url[:100]}",
                     document_url=safe_url,

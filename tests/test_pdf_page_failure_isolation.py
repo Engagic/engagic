@@ -54,3 +54,30 @@ def test_document_level_failure_still_raises():
 
     with pytest.raises(ExtractionError):
         _extractor().extract_from_bytes(b"%PDF-not-really")
+
+
+def test_extraction_timeout_scales_with_pages(tmp_path):
+    from analysis.analyzer_async import (
+        DOCUMENT_EXTRACTION_MAX_SECONDS,
+        DOCUMENT_EXTRACTION_TIMEOUT_SECONDS,
+        extraction_timeout_for,
+    )
+
+    small = tmp_path / "small.pdf"
+    small.write_bytes(_two_page_pdf())
+    assert extraction_timeout_for(str(small)) == DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
+
+    document = fitz.open()
+    for _ in range(900):
+        document.new_page()
+    big = tmp_path / "big.pdf"
+    big.write_bytes(document.tobytes())
+    document.close()
+    scaled = extraction_timeout_for(str(big))
+    assert DOCUMENT_EXTRACTION_TIMEOUT_SECONDS < scaled <= DOCUMENT_EXTRACTION_MAX_SECONDS
+    assert scaled == 300 + 1.5 * 900
+
+    garbage = tmp_path / "garbage.pdf"
+    garbage.write_bytes(b"not a pdf")
+    assert extraction_timeout_for(str(garbage)) == DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
+    assert extraction_timeout_for("/tmp/x.docx") == DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
