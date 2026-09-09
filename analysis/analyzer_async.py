@@ -21,6 +21,7 @@ import os
 import tempfile
 import time
 from typing import AsyncIterator, List, Dict, Any, Optional, Tuple, cast
+from urllib.parse import urljoin
 
 import aiohttp
 
@@ -40,6 +41,7 @@ from pipeline.document_artifacts import (
     DocumentArtifact,
     DocumentFormat,
     extract_document_links,
+    rewrite_s3_virtual_host,
     sanitize_html_text,
     verify_tls_for_url,
 )
@@ -299,6 +301,36 @@ class AsyncAnalyzer:
         except (TypeError, ValueError):
             return None
 
+    async def _get_following_redirects(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        request_kwargs: Dict[str, Any],
+        max_hops: int = 6,
+    ) -> aiohttp.ClientResponse:
+        """GET with redirects followed here rather than by aiohttp.
+
+        Each hop gets its own TLS decision and S3 virtual-host buckets with
+        underscores are rewritten to path-style before we connect; aiohttp
+        would otherwise carry the first hop's settings into a host it cannot
+        verify (Granicus AgendaViewer -> granicus_production_attachments).
+        """
+        current = rewrite_s3_virtual_host(url)
+        for _ in range(max_hops):
+            kwargs = dict(request_kwargs, ssl=verify_tls_for_url(current), allow_redirects=False)
+            resp = await session.get(current, **kwargs)
+            location = resp.headers.get("Location")
+            if resp.status in (301, 302, 303, 307, 308) and location:
+                resp.release()
+                current = rewrite_s3_virtual_host(urljoin(current, location))
+                continue
+            return resp
+        safe_url = attachment_identity(url)
+        raise DocumentDownloadError(
+            f"Too many redirects downloading document from {safe_url}",
+            document_url=safe_url,
+        )
+
     async def _download_url_bytes(
         self,
         url: str,
@@ -322,12 +354,13 @@ class AsyncAnalyzer:
             for attempt in range(attempts):
                 await get_rate_limiter().wait_if_needed(vendor)
                 try:
-                    request_kwargs: Dict[str, Any] = {
-                        "ssl": verify_tls_for_url(url)
-                    }
+                    request_kwargs: Dict[str, Any] = {}
                     if conditional_headers:
                         request_kwargs["headers"] = conditional_headers
-                    async with session.get(url, **request_kwargs) as resp:
+                    resp = await self._get_following_redirects(
+                        session, url, request_kwargs
+                    )
+                    async with resp:
                         response_url = str(getattr(resp, "url", url))
                         response_etag = resp.headers.get("ETag")
                         response_last_modified = resp.headers.get("Last-Modified")

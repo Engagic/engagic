@@ -21,6 +21,7 @@ from pipeline.document_artifacts import (
     DocumentFormat,
     make_artifact,
     sniff_document_format,
+    rewrite_s3_virtual_host,
     verify_tls_for_url,
 )
 
@@ -76,6 +77,16 @@ class _Response:
     async def __aexit__(self, exc_type, exc, traceback):
         return False
 
+    # aiohttp's session.get() is both awaitable and an async context manager;
+    # the downloader awaits it to inspect redirects before consuming the body.
+    def __await__(self):
+        async def _ready():
+            return self
+        return _ready().__await__()
+
+    def release(self):
+        return None
+
 
 class _Session:
     closed = False
@@ -85,7 +96,7 @@ class _Session:
         self.requests = []
         self.request_headers = []
 
-    def get(self, url, *, ssl, headers=None):
+    def get(self, url, *, ssl, headers=None, allow_redirects=True):
         self.requests.append((url, ssl))
         self.request_headers.append(headers or {})
         response = self.responses.pop(0)
@@ -718,29 +729,52 @@ def test_docx_dispatch_uses_python_docx():
     assert "Case | Z-42" in result["text"]
 
 
-def test_tls_verification_policy_is_narrow(monkeypatch):
+def test_tls_is_always_verified_and_underscore_buckets_go_path_style():
     assert verify_tls_for_url("https://example.test/a.pdf") is True
-    assert verify_tls_for_url("https://city.granicus.com/a.pdf") is True
-    assert verify_tls_for_url("https://s3.amazonaws.com/another-bucket/a.pdf") is True
-    legacy_url = "https://s3.amazonaws.com/granicus_production_attachments/a.pdf"
-    assert verify_tls_for_url(legacy_url) is False
-    assert verify_tls_for_url(
-        "https://granicus_production_attachments.s3.amazonaws.com/a.pdf"
-    ) is False
+    assert verify_tls_for_url("https://s3.amazonaws.com/granicus_production_attachments/a.pdf") is True
+    assert rewrite_s3_virtual_host(
+        "https://granicus_production_attachments.s3.amazonaws.com/moraga/x.pdf?v=1"
+    ) == "https://s3.amazonaws.com/granicus_production_attachments/moraga/x.pdf?v=1"
+    assert rewrite_s3_virtual_host(
+        "https://some_bucket.s3.us-west-2.amazonaws.com/k"
+    ) == "https://s3.us-west-2.amazonaws.com/some_bucket/k"
+    # Hyphenated buckets verify as virtual hosts; leave them alone.
+    assert rewrite_s3_virtual_host("https://fine-bucket.s3.amazonaws.com/k") == (
+        "https://fine-bucket.s3.amazonaws.com/k"
+    )
+    assert rewrite_s3_virtual_host("https://city.granicus.com/AgendaViewer.php?id=1") == (
+        "https://city.granicus.com/AgendaViewer.php?id=1"
+    )
 
+
+
+def test_redirect_to_underscore_bucket_is_followed_path_style(monkeypatch):
     session = _Session(
         [
-            _Response(b"%PDF-1.7 normal"),
-            _Response(b"%PDF-1.7 legacy"),
+            _Response(
+                b"",
+                status=302,
+                headers={
+                    "Location": "https://granicus_production_attachments.s3.amazonaws.com/x/y.pdf"
+                },
+            ),
+            _Response(b"%PDF-1.7 via path style", content_type="application/pdf"),
         ]
     )
     analyzer = AsyncAnalyzer(enable_llm=False)
     _configure_http(monkeypatch, analyzer, session)
 
-    asyncio.run(analyzer.acquire_document_async("https://example.test/a.pdf"))
-    asyncio.run(analyzer.acquire_document_async(legacy_url))
+    artifact = asyncio.run(
+        analyzer.acquire_document_async("https://city.granicus.com/AgendaViewer.php?id=1")
+    )
 
-    assert [ssl for _url, ssl in session.requests] == [True, False]
+    assert artifact.document_format is DocumentFormat.PDF
+    assert [url for url, _ssl in session.requests] == [
+        "https://city.granicus.com/AgendaViewer.php?id=1",
+        "https://s3.amazonaws.com/granicus_production_attachments/x/y.pdf",
+    ]
+    # TLS stays verified on every hop; the bypass is gone.
+    assert all(ssl is True for _url, ssl in session.requests)
 
 
 def test_transient_connection_failure_retries_once(monkeypatch):

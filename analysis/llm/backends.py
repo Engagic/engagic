@@ -110,6 +110,28 @@ def strip_code_fence(text: str) -> str:
     return _FENCE.sub("", text)
 
 
+# GLM in json_object mode occasionally escapes the delimiters of strings
+# inside a top-level array: "topics": [\"budget\"]. Everything else in the
+# document is valid, so repair that one shape rather than lose the summary.
+_ESCAPED_ARRAY_RE = re.compile(r'("topics"\s*:\s*\[)(.*?)(\])', re.S)
+
+
+def parse_json_lenient(text: str) -> Any:
+    """json.loads with one targeted repair for a known open-model quirk."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as first_error:
+        repaired = _ESCAPED_ARRAY_RE.sub(
+            lambda m: m.group(1) + m.group(2).replace('\\"', '"') + m.group(3), text
+        )
+        if repaired == text:
+            raise
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            raise first_error
+
+
 def price_estimate(
     model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0
 ) -> float:

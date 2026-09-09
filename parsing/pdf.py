@@ -897,11 +897,36 @@ class PdfExtractor:
         for page_num in range(len(doc)):
             page = doc[page_num]
 
-            # Extract text (with or without legislative formatting detection)
-            if use_formatting:
-                page_text = _extract_text_with_formatting(page, page_num + 1)
-            else:
-                page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
+            # Extract text (with or without legislative formatting detection).
+            # MuPDF allocation failures ("code=2: realloc failed" under the
+            # extraction subprocess RLIMIT) surface as RuntimeError; large-
+            # format drawing sheets trigger them on rawdict. One bad page
+            # must not discard a 300-page packet: fall back to the plain
+            # text layer, and if that fails too the page is unreadable and
+            # the document is marked partial for an OCR retry.
+            try:
+                if use_formatting:
+                    page_text = _extract_text_with_formatting(page, page_num + 1)
+                else:
+                    page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
+            except (RuntimeError, MemoryError) as exc:
+                logger.warning(
+                    "[PyMuPDF] page extraction failed, retrying plain text layer",
+                    page_num=page_num + 1,
+                    error=str(exc)[:200],
+                    error_type=type(exc).__name__,
+                )
+                try:
+                    page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
+                except (RuntimeError, MemoryError) as retry_exc:
+                    logger.warning(
+                        "[PyMuPDF] page unreadable, marking partial",
+                        page_num=page_num + 1,
+                        error=str(retry_exc)[:200],
+                    )
+                    ocr_pending_pages.add(page_num + 1)
+                    page_texts[page_num + 1] = ""
+                    continue
 
             suspicious_text_volume = len(page_text) > _MAX_PAGE_CHARS
             if suspicious_text_volume:
