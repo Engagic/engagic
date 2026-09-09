@@ -893,6 +893,10 @@ class PdfExtractor:
                 for page_num, _, original, repair_required in ocr_tasks
             )
             ocr_tasks = []
+            # Every page is rendered once and never revisited, so MuPDF's
+            # decoded-image store (up to 256 MB by default) is pure dead
+            # weight after a chunk. Drop it; the next chunk decodes fresh.
+            fitz.TOOLS.store_shrink(100)
         # Exact page provenance matters downstream: a structural item whose
         # bookmark/link boundary is sound may still be usable when one of its
         # pages needs OCR, while a text-derived boundary on that same page is

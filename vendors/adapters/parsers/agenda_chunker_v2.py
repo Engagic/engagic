@@ -16,6 +16,8 @@ Dependencies: PyMuPDF (fitz)
 """
 
 import fitz
+
+from vendors.adapters.parsers.pdf_links import page_links
 import re
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -82,6 +84,9 @@ def _extract_item_number_permissive(title: str) -> Tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 _MAX_AGENDA_PAGES = 15
+# Internal navigation: named destinations ("Page XX" references) and GoTo
+# actions, the latter carried by Link annotations or by form-widget buttons.
+_PAGE_LINK_KINDS = (fitz.LINK_GOTO, fitz.LINK_NAMED)
 # Threshold above which a doc is treated as a "packet" (agenda + staff reports).
 # Kept at 10 independent of the scan cap so auto-detection still prefers the
 # URL path for 11-15 page agendas with bookmarks -- bumping the cap alone
@@ -94,7 +99,7 @@ def _has_agenda_links(doc) -> bool:
     for page in doc:
         if page.number >= _MAX_AGENDA_PAGES:
             break
-        for link in page.get_links():
+        for link in page_links(page):
             if link.get("kind") == 2 and _is_attachment_url(link.get("uri", "")):
                 return True
     return False
@@ -110,8 +115,8 @@ def _count_internal_page_links(doc) -> int:
     for page in doc:
         if page.number >= _MAX_AGENDA_PAGES:
             break
-        for link in page.get_links():
-            if link.get("kind") == 4:
+        for link in page_links(page):
+            if link.get("kind") in _PAGE_LINK_KINDS:
                 try:
                     target = int(link.get("page", -1))
                 except (ValueError, TypeError):
@@ -451,6 +456,36 @@ def _parse_url_v2(doc, result: _ParsedAgenda):
 # Page-reference path: internal links as item boundaries
 # ---------------------------------------------------------------------------
 
+# Item headings on agenda pages: "4." / "A." / "4A." alone on a line or
+# followed by the title; the number and title may sit on separate lines.
+_ITEM_HEADING_LINE_RE = re.compile(r"^\s*(\d{1,3}[A-Za-z]?|[A-Z])\.\s*(\S.*)?$")
+
+
+_RECOMMENDED_ACTION_RE = re.compile(r"Recommended\s+Action", re.IGNORECASE)
+
+
+def _widget_item_text(span_text: str) -> str:
+    """Item heading and title for the block that ends at a button.
+
+    The block runs from the previous anchor to this button, so it can hold
+    the tail of the previous item's recommended action (often a numbered
+    sub-list that looks like headings) followed by this item's heading,
+    title, and its own recommended action. The item is the last heading
+    before the last "Recommended Action"; the text stops there.
+    """
+    lines = [line.rstrip() for line in span_text.splitlines()]
+    action_lines = [i for i, line in enumerate(lines) if _RECOMMENDED_ACTION_RE.search(line)]
+    limit = action_lines[-1] if action_lines else len(lines)
+    heading = None
+    for index in range(limit):
+        if _ITEM_HEADING_LINE_RE.match(lines[index]):
+            heading = index
+    if heading is None:
+        return ""
+    text = " ".join(part.strip() for part in lines[heading:limit] if part.strip())
+    return " ".join(text.split())
+
+
 def _collect_internal_page_links(doc) -> List[dict]:
     """Collect kind=4 internal links from agenda pages that point deep into the doc.
 
@@ -461,8 +496,10 @@ def _collect_internal_page_links(doc) -> List[dict]:
     for page in doc:
         if page.number >= _MAX_AGENDA_PAGES:
             break
-        for link in page.get_links():
-            if link.get("kind") != 4:
+        previous_anchor_bottom = page.rect.y0
+        previous_widget_text = ""
+        for link in sorted(page_links(page), key=lambda l: fitz.Rect(l.get("from") or (0, 0, 0, 0)).y0):
+            if link.get("kind") not in _PAGE_LINK_KINDS:
                 continue
             try:
                 target = int(link.get("page", -1))
@@ -478,7 +515,21 @@ def _collect_internal_page_links(doc) -> List[dict]:
             if not rect:
                 continue
             rect = fitz.Rect(rect)
-            text = page.get_text("text", clip=rect).strip()
+            if link.get("widget"):
+                # A button carries only its own label ("STAFF REPORT"). The
+                # item it belongs to is the nearest item heading above it:
+                # take the agenda text from the previous anchor down to the
+                # button, keep it from the last item-number heading onward,
+                # and stop at the recommended action. Two buttons on one
+                # line (twin proclamations) share the heading.
+                span = fitz.Rect(page.rect.x0, previous_anchor_bottom, rect.x0 - 2, rect.y1)
+                text = _widget_item_text(page.get_text("text", clip=span))
+                if not text and rect.y0 < previous_anchor_bottom + 4:
+                    text = previous_widget_text
+                previous_anchor_bottom = rect.y1
+                previous_widget_text = text
+            else:
+                text = page.get_text("text", clip=rect).strip()
             if not text:
                 continue
             links.append({
