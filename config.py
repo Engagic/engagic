@@ -115,6 +115,10 @@ class Config:
         self.OPENROUTER_PROVIDER_ORDER = _csv("ENGAGIC_OPENROUTER_PROVIDER_ORDER", "Z.AI")
         self.OPENROUTER_PROVIDER_SORT = os.getenv("ENGAGIC_OPENROUTER_PROVIDER_SORT") or None
         self.OPENROUTER_QUANTIZATIONS = _csv("ENGAGIC_OPENROUTER_QUANTIZATIONS", "bf16,fp16,fp8")
+        # Per-process ceiling on in-flight LLM calls, held in the backend.
+        # Z.AI allows 50 concurrent GLM-5.3-Flash requests per key; the
+        # default leaves headroom for a second process screen. 0 disables.
+        self.LLM_MAX_INFLIGHT = int(os.getenv("ENGAGIC_LLM_MAX_INFLIGHT", "24"))
         # "auto" tiers reasoning effort by document size (see summarizer);
         # a fixed low/medium/high pins it for every call.
         self.LLM_REASONING_EFFORT = os.getenv("ENGAGIC_LLM_REASONING_EFFORT", "auto").lower()

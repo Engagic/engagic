@@ -17,6 +17,7 @@ The native Gemini backend stays for rollback and the Gemini-only Batch lane.
 import json
 import random
 import re
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol
@@ -159,6 +160,7 @@ class OpenAICompatibleBackend:
         timeout_seconds: float = 300.0,
         max_retries: int = 4,
         max_retry_seconds: int = 180,
+        max_inflight: int = 0,
     ):
         if not api_key:
             raise ValueError(f"API key required for the {self.name} backend")
@@ -170,6 +172,11 @@ class OpenAICompatibleBackend:
         # One session per backend: connection reuse across a job's many calls.
         # requests.Session is thread-safe for concurrent requests.
         self.session = requests.Session()
+        # Provider concurrency ceilings are per key (Z.AI: 50 for
+        # GLM-5.3-Flash). JOB_CONCURRENCY x LLM_CONCURRENCY can exceed that,
+        # so the backend holds the real cap; callers block here instead of
+        # burning retries on 429s. 0 disables.
+        self._inflight = threading.BoundedSemaphore(max_inflight) if max_inflight > 0 else None
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -236,12 +243,7 @@ class OpenAICompatibleBackend:
 
         for attempt in range(self.max_retries):
             try:
-                response = self.session.post(
-                    self.endpoint,
-                    json=body,
-                    headers=self._headers(),
-                    timeout=self.timeout_seconds,
-                )
+                response = self._post(body)
                 if response.status_code in _RETRYABLE_HTTP:
                     raise _TransientError(
                         f"HTTP {response.status_code}: {response.text[:300]}",
@@ -291,6 +293,16 @@ class OpenAICompatibleBackend:
             prompt_type="unknown",
             original_error=last_error,
         )
+
+    def _post(self, body: Dict[str, Any]) -> requests.Response:
+        if self._inflight is None:
+            return self.session.post(
+                self.endpoint, json=body, headers=self._headers(), timeout=self.timeout_seconds
+            )
+        with self._inflight:
+            return self.session.post(
+                self.endpoint, json=body, headers=self._headers(), timeout=self.timeout_seconds
+            )
 
     def _parse(self, data: Dict[str, Any], started: float) -> Completion:
         choices = data.get("choices") or []
@@ -602,11 +614,16 @@ def build_backend(api_key: Optional[str] = None) -> ChatBackend:
             config.PRIMARY_MODEL,
         )
     if config.LLM_BACKEND == "zai":
-        return ZaiBackend(api_key or config.ZAI_API_KEY or "", config.PRIMARY_MODEL)
+        return ZaiBackend(
+            api_key or config.ZAI_API_KEY or "",
+            config.PRIMARY_MODEL,
+            max_inflight=config.LLM_MAX_INFLIGHT,
+        )
     return OpenRouterBackend(
         api_key or config.OPENROUTER_API_KEY or "",
         config.PRIMARY_MODEL,
         provider_order=config.OPENROUTER_PROVIDER_ORDER,
         provider_sort=config.OPENROUTER_PROVIDER_SORT,
         quantizations=config.OPENROUTER_QUANTIZATIONS,
+        max_inflight=config.LLM_MAX_INFLIGHT,
     )

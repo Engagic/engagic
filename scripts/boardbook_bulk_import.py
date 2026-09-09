@@ -11,8 +11,12 @@ Auto-add criteria:
   - Name does NOT match an exclusion (library, college, ESD, RESA, charter, ...)
   - State inference is unambiguous: only one state present, OR modal count >= 3
     AND modal >= 3x runner-up
-  - No existing jurisdiction with the same (name, state) -- the UNIQUE
-    constraint would otherwise reject the insert
+  - No existing jurisdiction with the same (name, state); those keep their
+    banana (bananas are frozen once assigned)
+
+Banana = slug of the district name as written + state (see
+scripts/_jurisdiction_naming.py). Two directory names that slug to the same
+banana are held for review, never suffixed.
 
 Anything failing those goes to /tmp/boardbook_review.tsv for triage.
 
@@ -34,11 +38,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database.db_postgres import Database
 from database.models import Jurisdiction
-from scripts._jurisdiction_naming import (
-    derive_district_stem,
-    disambiguate_bananas,
-    _strip_acronym_dots,
-)
+from scripts._jurisdiction_naming import _strip_acronym_dots, find_banana_collisions, make_banana
 
 
 BASE = "https://meetings.boardbook.org"
@@ -207,7 +207,13 @@ async def main(apply: bool, limit: Optional[int]):
                 *(fetch_org(session, slug, sem) for slug, _ in sds)
             )
 
-        # decisions: list of dicts (mutable so disambiguate_bananas can rewrite them)
+        # Districts already on file keep their bananas (frozen); the UNIQUE
+        # (name, state) constraint would reject a re-derived one anyway.
+        existing_rows = await db.pool.fetch(
+            "SELECT name, state, banana FROM jurisdictions WHERE type = 'school_district'"
+        )
+        existing = {(r["name"], r["state"]): r["banana"] for r in existing_rows}
+
         decisions: list[dict] = []
         for (slug, name), html in zip(sds, htmls):
             base = {
@@ -225,30 +231,29 @@ async def main(apply: bool, limit: Optional[int]):
             if not is_confident(modal, runner):
                 decisions.append({**base, "outcome": "ambiguous"})
                 continue
-            stem = derive_district_stem(name)
-            if not stem:
+            if (name, state) in existing:
+                decisions.append({**base, "banana": existing[(name, state)], "outcome": "exists"})
+                continue
+            try:
+                base["banana"] = make_banana(name, state)
+            except ValueError:
                 decisions.append({**base, "outcome": "empty_stem"})
                 continue
-            base["banana"] = stem + "sd" + state
             decisions.append({**base, "outcome": "ready"})
 
-        # Capture each ready row's initial banana before disambiguation so the
-        # apply phase can split unchanged vs. changed bananas (ordering matters
-        # for the UNIQUE(name, state) constraint).
+        # Two distinct directory names slugging to one banana almost always
+        # means one entity listed twice. Hold both for review; never invent
+        # a suffix.
         ready = [d for d in decisions if d["outcome"] == "ready"]
-        for d in ready:
-            d["initial_banana"] = d["banana"]
-
-        # Rewrite bananas for any same-(stem, state) collisions in the ready set
-        # (e.g. Skokie SD 68 / SD 69, Rice CISD / Rice ISD).
-        orphan_bananas = disambiguate_bananas(ready)
+        for banana, indices in find_banana_collisions(ready).items():
+            for index in indices:
+                ready[index]["outcome"] = "banana_collision"
+        ready = [d for d in decisions if d["outcome"] == "ready"]
 
         outcome_counts = Counter(d["outcome"] for d in decisions)
         print("\n=== DECISION SUMMARY ===")
         for outcome, count in outcome_counts.most_common():
             print(f"  {outcome:20s} {count}")
-        if orphan_bananas:
-            print(f"  orphan_bananas       {len(orphan_bananas)}  (collision bananas to delete)")
 
         review = [d for d in decisions if d["outcome"] != "ready"]
 
@@ -282,35 +287,16 @@ async def main(apply: bool, limit: Optional[int]):
                     f"state={d['state']} (modal={d['modal']}, runner_up={d['runner_up']}) -- {d['name']}"
                 )
 
-        if orphan_bananas:
-            print(f"\nOrphan collision bananas to DELETE: {sorted(orphan_bananas)}")
-
         if not apply:
             print(
-                f"\nDry run. {len(ready)} jurisdictions would be upserted; "
-                f"{len(orphan_bananas)} orphan bananas would be deleted. "
+                f"\nDry run. {len(ready)} jurisdictions would be inserted. "
                 "Re-run with --apply to execute."
             )
             return
 
-        # Apply phase. Ordering matters because of the UNIQUE(name, state) constraint:
-        #   1. DELETE orphan bananas (collision-banana rows whose entity no longer claims them).
-        #   2. UPSERT rows whose banana didn't change (these may overwrite a colliding
-        #      row's name in place, freeing that name for step 3).
-        #   3. UPSERT rows whose banana changed (now safe to INSERT at new banana).
-        if orphan_bananas:
-            print(f"\nDeleting {len(orphan_bananas)} orphan collision banana(s)...")
-            async with db.pool.acquire() as conn:
-                for banana in sorted(orphan_bananas):
-                    result = await conn.execute(
-                        "DELETE FROM jurisdictions WHERE banana = $1",
-                        banana,
-                    )
-                    print(f"  {banana}: {result}")
-
-        unchanged = [d for d in ready if d["banana"] == d["initial_banana"]]
-        changed = [d for d in ready if d["banana"] != d["initial_banana"]]
-        print(f"\nUpserting: {len(unchanged)} unchanged-banana, {len(changed)} new-banana")
+        # Apply phase. Every ready row has a fresh (name, state) and a banana
+        # nobody else claims, so this is one batch of plain inserts.
+        print(f"\nInserting {len(ready)} districts")
 
         async def _upsert(d):
             j = Jurisdiction(
@@ -326,18 +312,17 @@ async def main(apply: bool, limit: Optional[int]):
 
         inserted = 0
         failed = []
-        for batch_label, batch in (("unchanged", unchanged), ("new-banana", changed)):
-            for d in batch:
-                try:
-                    await _upsert(d)
-                    inserted += 1
-                except Exception as e:
-                    failed.append((batch_label, d["banana"], d["name"], d["state"], str(e)))
-        print(f"Upserted: {inserted}/{len(ready)}")
+        for d in ready:
+            try:
+                await _upsert(d)
+                inserted += 1
+            except Exception as e:
+                failed.append((d["banana"], d["name"], d["state"], str(e)))
+        print(f"Inserted: {inserted}/{len(ready)}")
         if failed:
             print(f"\nFailures ({len(failed)}):")
-            for batch_label, banana, name, state, err in failed[:20]:
-                print(f"  [{batch_label}] {banana} ({name}, {state}): {err}")
+            for banana, name, state, err in failed[:20]:
+                print(f"  {banana} ({name}, {state}): {err}")
             if len(failed) > 20:
                 print(f"  ... and {len(failed) - 20} more")
 

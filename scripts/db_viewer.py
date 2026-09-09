@@ -18,7 +18,7 @@ from uszipcode import SearchEngine
 
 from database.db_postgres import Database
 from database.models import Jurisdiction
-from scripts._jurisdiction_naming import to_banana_slug, derive_district_stem
+from scripts._jurisdiction_naming import make_banana
 
 
 # State abbreviation to FIPS code mapping
@@ -430,8 +430,8 @@ class DatabaseViewer:
             else:
                 population = auto_population
 
-            # Generate banana
-            banana = to_banana_slug(city_name) + state.upper()
+            # Banana is the name as people say it plus the state
+            banana = make_banana(city_name, state)
 
             city = Jurisdiction(
                 banana=banana,
@@ -513,11 +513,10 @@ class DatabaseViewer:
             pop_input = input("Population (optional): ").strip()
             population = int(pop_input) if pop_input else None
 
-            # Generate banana: alamedacountyCA
-            banana = to_banana_slug(county_name) + "county" + state.upper()
-
-            # Display name includes "County"
+            # Display name includes "County"; people say "Alameda County",
+            # so the banana carries it too: alamedacountyCA
             display_name = f"{county_name} County"
+            banana = make_banana(display_name, state)
 
             county = Jurisdiction(
                 banana=banana,
@@ -596,15 +595,17 @@ class DatabaseViewer:
                 print("State must be 2-letter code (e.g., CA)")
                 return False
 
-            # Auto-derive a short stem; let user override if the heuristic over-strips.
-            # Mirrors the county convention: display name stays full, banana stays short.
-            auto_stem = derive_district_stem(district_name)
-            stem_input = input(f"Banana stem [auto: '{auto_stem}'] (Enter to accept): ").strip()
-            stem = to_banana_slug(stem_input) if stem_input else auto_stem
-            if not stem:
-                print("Stem cannot be empty")
+            # Default banana is name + state. Supply a contraction only when
+            # that would be convoluted or not what people say
+            # (Palo Alto Unified School District -> PAUSD -> pausdCA).
+            vernacular = input(
+                f"Contraction if name+state is convoluted [Enter to use '{district_name}', e.g. PAUSD]: "
+            ).strip()
+            try:
+                banana = make_banana(district_name, state, vernacular or None)
+            except ValueError as exc:
+                print(f"   {exc}")
                 return False
-            banana = stem + "sd" + state
             print(f"   Banana will be: {banana}")
 
             slug = input("Slug (vendor-specific): ").strip()
@@ -722,7 +723,7 @@ class DatabaseViewer:
 
                 # If updating name or state, recalculate banana
                 if field in ['name', 'state']:
-                    new_banana = to_banana_slug(city.name) + city.state.upper()
+                    new_banana = make_banana(city.name, city.state)
 
                     if new_banana != current_banana:
                         # Need to update banana and all foreign keys
