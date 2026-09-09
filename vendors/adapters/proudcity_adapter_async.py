@@ -157,7 +157,7 @@ class AsyncProudCityAdapter(AsyncBaseAdapter):
 
         # Enrich each meeting with document URLs from individual pages
         tasks = [self._enrich_meeting(m) for m in meetings_raw]
-        enriched = await asyncio.gather(*tasks, return_exceptions=True)
+        enriched = await self._bounded_gather(tasks, max_concurrent=5, return_exceptions=True)
 
         results = []
         for idx, meeting in enumerate(enriched):

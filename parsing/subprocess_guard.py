@@ -25,6 +25,8 @@ import time
 from queue import Empty
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from parsing.memory_budget import wait_for_memory
+
 # Forkserver over fork: children must not inherit the parent's event loop,
 # sockets, or DB pool fds. Over spawn: repeated launches skip re-running the
 # interpreter setup. The forkserver process itself starts lazily on first
@@ -137,6 +139,9 @@ def run_guarded(
     (child died silently -- segfault, OOM), or GuardTaskError (target raised;
     original message and type attached). Anything else propagates as-is.
     """
+    # Admission by available memory, not by count: the per-child RLIMIT is
+    # safe alone and unbounded in aggregate (8 x 1.5 GB on a 3.8 GB box).
+    wait_for_memory()
     result_queue = _forkserver_ctx.Queue()
     proc = _forkserver_ctx.Process(
         target=_guard_worker,

@@ -173,10 +173,20 @@ def test_download_http_status_classification_and_url_redaction(
         async def __aexit__(self, exc_type, exc, traceback):
             return False
 
+        # aiohttp's session.get() is awaitable as well as a context manager;
+        # the downloader awaits it to inspect redirects first.
+        def __await__(self):
+            async def _ready():
+                return self
+            return _ready().__await__()
+
+        def release(self):
+            return None
+
     class Session:
         calls = 0
 
-        def get(self, url, ssl):
+        def get(self, url, ssl, allow_redirects=True):
             assert url == signed_url
             assert ssl is True
             self.calls += 1

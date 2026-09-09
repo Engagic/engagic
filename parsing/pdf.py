@@ -852,6 +852,29 @@ class PdfExtractor:
         page_texts = {}  # page_num -> text
         all_links = []
         ocr_tasks = []  # (page_num, png_bytes, original_text, repair_required)
+        # OCR runs in bounded chunks interleaved with page reading rather than
+        # after it. Rendered PNGs are the dominant memory cost: holding one per
+        # page until the end put a 600-page scan past the extraction
+        # subprocess's 1.5 GB cap around page 630. A chunk of workers x 2 keeps
+        # only that many renders alive; rendering is milliseconds against
+        # seconds of OCR, so the pause while a chunk drains costs little.
+        ocr_chunk_size = max(2, self.max_ocr_workers * 2)
+        ocr_meta: List[Tuple[int, str, bool]] = []  # (page_num, original_text, repair_required)
+        ocr_results: Dict[int, str] = {}
+        failed_ocr_pages: set[int] = set()
+
+        def flush_ocr_chunk() -> None:
+            nonlocal ocr_tasks
+            if not ocr_tasks:
+                return
+            chunk_results, chunk_failed = self._ocr_pages_parallel(ocr_tasks)
+            ocr_results.update(chunk_results)
+            failed_ocr_pages.update(chunk_failed)
+            ocr_meta.extend(
+                (page_num, original, repair_required)
+                for page_num, _, original, repair_required in ocr_tasks
+            )
+            ocr_tasks = []
         # Exact page provenance matters downstream: a structural item whose
         # bookmark/link boundary is sound may still be usable when one of its
         # pages needs OCR, while a text-derived boundary on that same page is
@@ -897,11 +920,36 @@ class PdfExtractor:
         for page_num in range(len(doc)):
             page = doc[page_num]
 
-            # Extract text (with or without legislative formatting detection)
-            if use_formatting:
-                page_text = _extract_text_with_formatting(page, page_num + 1)
-            else:
-                page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
+            # Extract text (with or without legislative formatting detection).
+            # MuPDF allocation failures ("code=2: realloc failed" under the
+            # extraction subprocess RLIMIT) surface as RuntimeError; large-
+            # format drawing sheets trigger them on rawdict. One bad page
+            # must not discard a 300-page packet: fall back to the plain
+            # text layer, and if that fails too the page is unreadable and
+            # the document is marked partial for an OCR retry.
+            try:
+                if use_formatting:
+                    page_text = _extract_text_with_formatting(page, page_num + 1)
+                else:
+                    page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
+            except (RuntimeError, MemoryError) as exc:
+                logger.warning(
+                    "[PyMuPDF] page extraction failed, retrying plain text layer",
+                    page_num=page_num + 1,
+                    error=str(exc)[:200],
+                    error_type=type(exc).__name__,
+                )
+                try:
+                    page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
+                except (RuntimeError, MemoryError) as retry_exc:
+                    logger.warning(
+                        "[PyMuPDF] page unreadable, marking partial",
+                        page_num=page_num + 1,
+                        error=str(retry_exc)[:200],
+                    )
+                    ocr_pending_pages.add(page_num + 1)
+                    page_texts[page_num + 1] = ""
+                    continue
 
             suspicious_text_volume = len(page_text) > _MAX_PAGE_CHARS
             if suspicious_text_volume:
@@ -945,6 +993,8 @@ class PdfExtractor:
                         ocr_tasks.append(
                             (page_num + 1, png_bytes, page_text, repair_required)
                         )
+                        if len(ocr_tasks) >= ocr_chunk_size:
+                            flush_ocr_chunk()
                     else:
                         # Rendering failure means the OCR-owning path could not
                         # establish completeness, even when the retained layer
@@ -967,21 +1017,20 @@ class PdfExtractor:
 
         page_count = len(doc)
 
-        # Pass 2: Run OCR in parallel (outside doc context, PNG bytes already captured)
-        failed_ocr_pages: set[int] = set()
-        if ocr_tasks:
-            ocr_results, failed_ocr_pages = self._ocr_pages_parallel(ocr_tasks)
-            page_texts.update(ocr_results)
-            ocr_pending_pages.update(failed_ocr_pages)
+        # Drain the last OCR chunk (outside the doc context; PNG bytes are
+        # already captured per chunk).
+        flush_ocr_chunk()
+        page_texts.update(ocr_results)
+        ocr_pending_pages.update(failed_ocr_pages)
 
         # Count OCR pages (pages where OCR was actually used, not just attempted)
         ocr_pages = sum(
-            1 for page_num, _, original, _ in ocr_tasks
+            1 for page_num, original, _ in ocr_meta
             if page_num in page_texts and page_texts[page_num] != original
         )
         unrepaired_required_pages = {
             page_num
-            for page_num, _, original, repair_required in ocr_tasks
+            for page_num, original, repair_required in ocr_meta
             if repair_required
             and page_num not in failed_ocr_pages
             and page_texts.get(page_num, original) == original

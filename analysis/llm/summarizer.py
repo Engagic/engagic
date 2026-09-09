@@ -41,6 +41,7 @@ from analysis.llm.backends import (
     ChatBackend,
     Completion,
     build_backend,
+    parse_json_lenient,
     price_estimate,
     strip_code_fence,
 )
@@ -1596,7 +1597,7 @@ class Summarizer:
         response_text = strip_code_fence(response_text).strip()
 
         try:
-            data = json.loads(response_text)
+            data = parse_json_lenient(response_text)
 
             # Validate JSON structure
             required_fields = ["summary_markdown", "topics"]

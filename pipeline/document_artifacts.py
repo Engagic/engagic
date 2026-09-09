@@ -238,22 +238,34 @@ def sanitize_html_text(html_bytes: bytes) -> str:
     return _BLANK_LINES_RE.sub("\n\n", "\n".join(lines)).strip()
 
 
-_TLS_BYPASS_HOST = "s3.amazonaws.com"
-_TLS_BYPASS_VIRTUAL_HOST = "granicus_production_attachments.s3.amazonaws.com"
-_TLS_BYPASS_PATH_PREFIX = "/granicus_production_attachments/"
+# S3 virtual-host URLs for buckets whose names contain underscores
+# (granicus_production_attachments.s3.amazonaws.com) cannot pass TLS hostname
+# verification: RFC hostnames forbid "_", so OpenSSL refuses the wildcard
+# match even though browsers allow it. The same object is served path-style
+# under a valid certificate. Rewriting is strictly better than the TLS bypass
+# it replaces, because verification stays on.
+_S3_VIRTUAL_HOST_RE = re.compile(
+    r"^(?P<bucket>[^/]+)\.(?P<endpoint>s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com)$",
+    re.IGNORECASE,
+)
 
 
-def verify_tls_for_url(url: str) -> bool:
-    """Verify TLS except for the one documented legacy Granicus S3 bucket."""
+def rewrite_s3_virtual_host(url: str) -> str:
+    """Path-style form for S3 virtual-host URLs whose bucket has an underscore."""
     try:
         parsed = urlparse(url)
     except ValueError:
-        return True
-    host = (parsed.hostname or "").lower()
-    return not (
-        host == _TLS_BYPASS_VIRTUAL_HOST
-        or (
-            host == _TLS_BYPASS_HOST
-            and parsed.path.lower().startswith(_TLS_BYPASS_PATH_PREFIX)
-        )
-    )
+        return url
+    match = _S3_VIRTUAL_HOST_RE.match(parsed.hostname or "")
+    if not match or "_" not in match.group("bucket"):
+        return url
+    path = f"/{match.group('bucket')}{parsed.path or '/'}"
+    return parsed._replace(netloc=match.group("endpoint"), path=path).geturl()
+
+
+def verify_tls_for_url(url: str) -> bool:
+    """Always verify. The legacy Granicus bucket bypass is retired: the
+    downloader rewrites that host to path-style, which verifies cleanly."""
+    return True
+
+

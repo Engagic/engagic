@@ -211,7 +211,7 @@ class AsyncVisionInternetAdapter(AsyncBaseAdapter):
             self._scrape_calendar(cal, start_date, end_date)
             for cal in self.calendar_paths
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await self._bounded_gather(tasks, max_concurrent=5, return_exceptions=True)
 
         all_meetings: List[Dict[str, Any]] = []
         for idx, result in enumerate(results):

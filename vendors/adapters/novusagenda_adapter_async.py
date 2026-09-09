@@ -450,7 +450,7 @@ class AsyncNovusAgendaAdapter(AsyncBaseAdapter):
                         break
             return item
 
-        return list(await asyncio.gather(*[fetch_one(item) for item in items]))
+        return list(await self._bounded_gather([fetch_one(item) for item in items], max_concurrent=4, return_exceptions=False))
 
     def _parse_coversheet_attachments(self, html: str) -> List[Dict[str, str]]:
         """Extract attachment links from a CoverSheet.aspx page.

@@ -88,7 +88,7 @@ class AsyncRossAdapter(AsyncBaseAdapter):
 
         # Enrich with structured items from detail pages
         tasks = [self._enrich_meeting(m) for m in meetings]
-        enriched = await asyncio.gather(*tasks, return_exceptions=True)
+        enriched = await self._bounded_gather(tasks, max_concurrent=5, return_exceptions=True)
 
         results = []
         for idx, meeting in enumerate(enriched):

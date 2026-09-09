@@ -110,6 +110,60 @@ def strip_code_fence(text: str) -> str:
     return _FENCE.sub("", text)
 
 
+# GLM in json_object mode occasionally escapes the delimiters of strings
+# inside a top-level array: "topics": [\"budget\"]. Everything else in the
+# document is valid, so repair that one shape rather than lose the summary.
+_ESCAPED_ARRAY_RE = re.compile(r'("topics"\s*:\s*\[)(.*?)(\])', re.S)
+# Unescaped double quotes inside the summary string (the model wrote
+# "benefitted" raw). The field boundaries are unambiguous: it opens after the
+# key and closes right before the topics key, so quotes between them can be
+# escaped without touching anything else.
+_SUMMARY_FIELD_RE = re.compile(r'("summary_markdown"\s*:\s*")(.*?)("\s*,\s*"topics"\s*:)', re.S)
+_UNESCAPED_QUOTE_RE = re.compile(r'(?<!\\)"')
+
+
+def parse_json_lenient(text: str) -> Any:
+    """json.loads with three targeted repairs for known open-model quirks.
+
+    1. Escaped delimiters inside the topics array ("topics": [\\"budget\\"]).
+    2. Raw double quotes inside the summary string.
+    3. Stray characters outside the object (a lone backtick after the closing
+       brace, a preamble before the opening one). The object itself is kept
+       byte-for-byte; only what lies outside its outermost braces is cut.
+    """
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        first_error = exc
+    candidates = []
+
+    def repair_fields(candidate: str) -> str:
+        candidate = _ESCAPED_ARRAY_RE.sub(
+            lambda m: m.group(1) + m.group(2).replace('\\"', '"') + m.group(3), candidate
+        )
+        return _SUMMARY_FIELD_RE.sub(
+            lambda m: m.group(1) + _UNESCAPED_QUOTE_RE.sub('\\\\"', m.group(2)) + m.group(3),
+            candidate,
+        )
+
+    repaired = repair_fields(text)
+    if repaired != text:
+        candidates.append(repaired)
+    start, end = text.find("{"), text.rfind("}")
+    if start >= 0 and end > start and (start > 0 or end < len(text.rstrip()) - 1):
+        trimmed = text[start : end + 1]
+        candidates.append(trimmed)
+        trimmed_repaired = repair_fields(trimmed)
+        if trimmed_repaired != trimmed:
+            candidates.append(trimmed_repaired)
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+    raise first_error
+
+
 def price_estimate(
     model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0
 ) -> float:
