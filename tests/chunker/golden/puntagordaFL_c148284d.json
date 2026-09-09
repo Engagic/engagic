@@ -1,11 +1,131 @@
 {
   "ladder": "packet",
   "morphology": "linked_agenda",
-  "quality": null,
-  "winning_rung": null,
-  "parse_method": "",
-  "failure_reason": "no_items",
-  "page_count": null,
-  "item_count": 0,
-  "items": []
+  "quality": {
+    "garbage_titles": 0,
+    "repaired_titles": 0,
+    "matter_files": 0,
+    "seg_smell": null
+  },
+  "winning_rung": "text:auto",
+  "parse_method": "text_items",
+  "failure_reason": null,
+  "page_count": 3,
+  "item_count": 19,
+  "items": [
+    {
+      "number": "1",
+      "title": "APPROVAL OF MINUTES",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "1.A",
+      "title": "May 21, 2026, Meeting Minutes.",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2",
+      "title": "NEW BUSINESS",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2.A",
+      "title": "CITATION 206610 HEARING-25-89316- PGPD OFFICER-ERIC LEE Respondent:",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2.B",
+      "title": "HEARING-26-90204- CODE COMPLIANCE OFFICER- MEREDITH ACHTENBERG",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2.C",
+      "title": "HEARING-26-90205- CODE COMPLIANCE OFFICER- MEREDITH ACHTENBERG",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2.D",
+      "title": "HEARING-26-90206- CODE COMPLIANCE OFFICER- MEREDITH ACHTENBERG",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2.E",
+      "title": "HEARING-26-90207-CODE COMPLIANCE OFFICER-MEREDITH ACHTENBERG",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2.F",
+      "title": "HEARING-26-90208-CODE COMPLIANCE OFFICER-MEREDITH ACHTENBERG",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "2.G",
+      "title": "HEARING-26-90211-CODE COMPLIANCE OFFICER-MEREDITH ACHTENBERG",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "2.H",
+      "title": "HEARING-26-90332- CODE COMPLIANCE OFFICER- MEREDITH ACHTENBERG",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "2.I",
+      "title": "HEARING-25-89299- CODE COMPLIANCE OFFICER- SHANNIE KUHNS",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "2.J",
+      "title": "HEARING-25-89236-CODE COMPLIANCE OFFICER-SHANNIE KUHNS",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "2.K",
+      "title": "HEARING-26-90265- CODE COMPLIANCE SUPERVISOR- NICK FALKNER",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "3",
+      "title": "UNFINISHED BUSINESS",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "3.A",
+      "title": "HEARING IMPOSING PENALTY-HEARING-26-89350- CODE COMPLIANCE",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "4",
+      "title": "STAFF COMMENTS",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "4.A",
+      "title": "Absence Approval Procedure",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "5",
+      "title": "MEMBER COMMENTS",
+      "page_start": 2,
+      "attachments": 0
+    }
+  ]
 }

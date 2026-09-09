@@ -24,7 +24,7 @@ from config import get_logger
 logger = get_logger(__name__)
 
 # All nine corpus specimens are 1-8 pages; text agendas are short by nature.
-TEXT_AGENDA_MAX_PAGES = 20
+TEXT_AGENDA_MAX_PAGES = 40  # was 20; a 22-page committee packet (Kenosha WI) is still a text agenda
 MIN_ITEMS = 3
 MAX_HEADINGS = 80
 MAX_BODY_CHARS = 15_000
@@ -40,6 +40,42 @@ _HEADING_RE = re.compile(
     r")\s+(\S.*)$"
 )
 _TITLE_WORD_RE = re.compile(r"[A-Za-z]{3}")
+# A number standing alone on its line ("1." / "B." / "4.a") with the title
+# on the following line. Kenosha WI and Antioch CA agendas are laid out
+# this way; Kenosha additionally pads the number with a zero-width space.
+_NUMBER_ONLY_RE = re.compile(
+    r"^\s*(\d{1,3}\.(?:\d{1,2}|[a-zA-Z])[.)]?|\d{1,3}[.)]|[A-Z][.)]|[IVXLC]{1,6}[.)])\s*$"
+)
+_ZERO_WIDTH_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+
+
+def _collect_headings(lines: List[Tuple[int, str]], *, allow_number_alone: bool):
+    headings = []  # (line_idx, page_idx, number, title)
+    seen: set = set()
+    for idx, (page_idx, raw) in enumerate(lines):
+        m = _HEADING_RE.match(raw)
+        if m:
+            title = m.group(2).strip()
+            number = m.group(1).rstrip(".)")
+        elif allow_number_alone:
+            alone = _NUMBER_ONLY_RE.match(raw)
+            if not alone:
+                continue
+            following = next((t.strip() for _, t in lines[idx + 1 : idx + 3] if t.strip()), "")
+            if not following or _HEADING_RE.match(following) or _NUMBER_ONLY_RE.match(following):
+                continue
+            title = following
+            number = alone.group(1).rstrip(".)")
+        else:
+            continue
+        if not _TITLE_WORD_RE.search(title):
+            continue
+        # Repeated (number, title) pairs are page headers/footers, not items
+        if (number, title) in seen:
+            continue
+        seen.add((number, title))
+        headings.append((idx, page_idx, number, title))
+    return headings
 
 
 def _empty(page_count: int) -> Dict[str, Any]:
@@ -62,25 +98,17 @@ def parse_agenda_pdf_text(
         lines: List[Tuple[int, str]] = []
         for i in range(page_count):
             for raw in str(doc[i].get_text("text")).splitlines():
-                lines.append((i, raw))
+                lines.append((i, _ZERO_WIDTH_RE.sub("", raw)))
     finally:
         doc.close()
 
-    headings = []  # (line_idx, page_idx, number, title)
-    seen: set = set()
-    for idx, (page_idx, raw) in enumerate(lines):
-        m = _HEADING_RE.match(raw)
-        if not m:
-            continue
-        title = m.group(2).strip()
-        if not _TITLE_WORD_RE.search(title):
-            continue
-        number = m.group(1).rstrip(".)")
-        # Repeated (number, title) pairs are page headers/footers, not items
-        if (number, title) in seen:
-            continue
-        seen.add((number, title))
-        headings.append((idx, page_idx, number, title))
+    # Same-line headings first: the shape every existing golden was pinned
+    # on. Only when that finds nothing do we try the number-alone layout
+    # ("1." on its own line, title below), so agendas that already parsed
+    # keep their item sequence and ids.
+    headings = _collect_headings(lines, allow_number_alone=False)
+    if len(headings) < MIN_ITEMS:
+        headings = _collect_headings(lines, allow_number_alone=True)
 
     if not MIN_ITEMS <= len(headings) <= MAX_HEADINGS:
         return _empty(page_count)

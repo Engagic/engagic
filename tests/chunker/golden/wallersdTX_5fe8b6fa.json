@@ -1,11 +1,71 @@
 {
   "ladder": "packet",
-  "morphology": "monolith",
-  "quality": null,
-  "winning_rung": null,
-  "parse_method": "",
-  "failure_reason": "no_items",
-  "page_count": null,
-  "item_count": 0,
-  "items": []
+  "morphology": "flat_text_agenda",
+  "quality": {
+    "garbage_titles": 0,
+    "repaired_titles": 0,
+    "matter_files": 0,
+    "seg_smell": null
+  },
+  "winning_rung": "text:auto",
+  "parse_method": "text_items",
+  "failure_reason": null,
+  "page_count": 5,
+  "item_count": 9,
+  "items": [
+    {
+      "number": "1",
+      "title": "CALL TO ORDER",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2",
+      "title": "PRAYER AND PLEDGE OF ALLEGIANCE TO THE U.S. & TEXAS FLAG",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "3",
+      "title": "PUBLIC COMMENTS",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "4",
+      "title": "OATH OF OFFICE",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "5",
+      "title": "MEETING RECESSED TO CLOSED SESSION",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "6",
+      "title": "OPEN MEETING RECONVENED - Approximately 6:30 p.m.",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "7",
+      "title": "RECOGNITIONS",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "8",
+      "title": "CONSENT AGENDA",
+      "page_start": 3,
+      "attachments": 0
+    },
+    {
+      "number": "9",
+      "title": "REGULAR AGENDA",
+      "page_start": 3,
+      "attachments": 0
+    }
+  ]
 }

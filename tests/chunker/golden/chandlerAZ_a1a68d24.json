@@ -1,11 +1,77 @@
 {
   "ladder": "packet",
   "morphology": "monolith",
-  "quality": null,
-  "winning_rung": null,
-  "parse_method": "",
-  "failure_reason": "no_items",
-  "page_count": null,
-  "item_count": 0,
-  "items": []
+  "quality": {
+    "garbage_titles": 0,
+    "repaired_titles": 0,
+    "matter_files": 0,
+    "seg_smell": null
+  },
+  "winning_rung": "text:auto",
+  "parse_method": "text_items",
+  "failure_reason": null,
+  "page_count": 3,
+  "item_count": 10,
+  "items": [
+    {
+      "number": "1",
+      "title": "May 12, 2026 Military and Veterans Affairs Commission Meeting Minutes",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "2",
+      "title": "Military and Veterans Affairs Commission Objectives",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "3",
+      "title": "Military and Veteran Affairs Commission Work Session 2026",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "4",
+      "title": "Salute to Service 5K Trail Run",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "5",
+      "title": "Naming of a United States Naval Vessel",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "6",
+      "title": "Honor Wall Update",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "7",
+      "title": "Treasury Report",
+      "page_start": 3,
+      "attachments": 0
+    },
+    {
+      "number": "8",
+      "title": "Announcements regarding any external events.",
+      "page_start": 3,
+      "attachments": 0
+    },
+    {
+      "number": "9",
+      "title": "The next Military and Veterans Affairs Commission Work Session will be held",
+      "page_start": 3,
+      "attachments": 0
+    },
+    {
+      "number": "10",
+      "title": "The next Military and Veterans Affairs Commission meeting will be held Tuesday,",
+      "page_start": 3,
+      "attachments": 0
+    }
+  ]
 }

@@ -1,11 +1,59 @@
 {
   "ladder": "packet",
   "morphology": "linked_agenda",
-  "quality": null,
-  "winning_rung": null,
-  "parse_method": "",
-  "failure_reason": "no_items",
-  "page_count": null,
-  "item_count": 0,
-  "items": []
+  "quality": {
+    "garbage_titles": 0,
+    "repaired_titles": 0,
+    "matter_files": 0,
+    "seg_smell": null
+  },
+  "winning_rung": "text:auto",
+  "parse_method": "text_items",
+  "failure_reason": null,
+  "page_count": 2,
+  "item_count": 7,
+  "items": [
+    {
+      "number": "I",
+      "title": "Call to Order",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "II",
+      "title": "Introductions/Notices",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "III",
+      "title": "Review/Approve minutes from April 17, 2026, meeting",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "IV",
+      "title": "Special Topics",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "V",
+      "title": "Internal Audit Reports",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "VI",
+      "title": "Other Discussion Items",
+      "page_start": 2,
+      "attachments": 0
+    },
+    {
+      "number": "VII",
+      "title": "Closing & Adjourn",
+      "page_start": 2,
+      "attachments": 0
+    }
+  ]
 }

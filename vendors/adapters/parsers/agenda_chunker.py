@@ -706,6 +706,11 @@ def _find_agenda_page_range(doc, toc):
 
 def _extract_memo_content(doc, page_start, page_end):
     """Extract structured content from embedded memo pages (0-indexed input)."""
+    # Callers derive page_end from bookmarks and link targets, which can
+    # point one past the last page (Island County WA: a 96-page packet asked
+    # for page 96). Clamp instead of crashing the whole rung.
+    page_end = min(page_end, doc.page_count - 1)
+    page_start = max(0, min(page_start, page_end))
     memo = _MemoContent(page_start=page_start + 1, page_end=page_end + 1)
 
     parts = []

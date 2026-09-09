@@ -150,6 +150,15 @@ class Config:
         self.WORK_MEMORY_BUDGET_BYTES = (
             int(os.getenv("ENGAGIC_WORK_MEMORY_BUDGET_MB", "2048")) * 1024 * 1024
         )
+        # What one extraction child is expected to hold, for admission
+        # accounting. This is NOT the RLIMIT (1.5 GB address space, a hard
+        # cap that only pathological documents approach): measured RSS on
+        # 2026-09-09 ran 150-460 MB, 900 MB for an 800-page OCR scan.
+        # Reserving the cap instead of the working set required 2.2 GB free
+        # before any extraction could start, which this 3.8 GB box rarely has.
+        self.EXTRACTION_RESERVATION_BYTES = (
+            int(os.getenv("ENGAGIC_EXTRACTION_RESERVATION_MB", "384")) * 1024 * 1024
+        )
         self.EXTRACTION_MIN_AVAILABLE_BYTES = (
             int(os.getenv("ENGAGIC_EXTRACTION_MIN_AVAILABLE_MB", "700")) * 1024 * 1024
         )

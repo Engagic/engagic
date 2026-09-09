@@ -28,6 +28,7 @@ import time
 from queue import Empty
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from config import config
 from parsing.memory_budget import (
     MemoryAdmissionCancelled,
     MemoryAdmissionTimeout,
@@ -139,6 +140,7 @@ def run_guarded(
     timeout: float = 600.0,
     rlimit_bytes: int = DEFAULT_RLIMIT_BYTES,
     cancel_event: Optional[threading.Event] = None,
+    reservation_bytes: Optional[int] = None,
 ) -> Any:
     """Run target(*args, **kwargs) in a resource-capped subprocess.
 
@@ -152,8 +154,12 @@ def run_guarded(
     original message and type attached). Anything else propagates as-is.
     """
     deadline = time.monotonic() + timeout
+    # Admission accounts for the child's expected working set; rlimit_bytes
+    # stays the hard address-space cap applied inside the child.
+    if reservation_bytes is None:
+        reservation_bytes = min(config.EXTRACTION_RESERVATION_BYTES, rlimit_bytes)
     try:
-        with reserve_memory(rlimit_bytes, deadline=deadline, cancel_event=cancel_event):
+        with reserve_memory(reservation_bytes, deadline=deadline, cancel_event=cancel_event):
             return _run_reserved(target, args, kwargs, deadline, rlimit_bytes, cancel_event)
     except MemoryAdmissionTimeout as exc:
         raise GuardTimeout(str(exc)) from exc

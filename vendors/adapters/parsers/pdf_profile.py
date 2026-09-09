@@ -37,6 +37,9 @@ TEXT_LAYER_MIN_CHARS = 50
 
 # Permissive agenda-item numbering: "1.", "12)", "4.a", "4.a.", "8.1",
 # "IV.", "B." — a signal, not a parser; counts heading-shaped lines.
+# Zero-width characters (Kenosha WI pads "1." with U+200B) defeat the
+# heading regex; strip them before matching.
+_ZERO_WIDTH_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 _ITEM_NUMBER_RE = re.compile(
     r"^\s*(?:"
     r"\d{1,3}\.(?:\d{1,2}|[a-zA-Z])[.)]?"  # 8.1 / 4.a / 4.a.
@@ -119,7 +122,7 @@ def profile_doc(doc: fitz.Document) -> PdfProfile:
         if i < TEXT_SAMPLE_PAGES:
             p.text_chars += len(text.strip())
         for line in text.splitlines():
-            if _ITEM_NUMBER_RE.match(line):
+            if _ITEM_NUMBER_RE.match(_ZERO_WIDTH_RE.sub("", line)):
                 p.item_number_lines += 1
 
     p.link_pages = sorted(link_pages)

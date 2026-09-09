@@ -1,11 +1,35 @@
 {
   "ladder": "packet",
   "morphology": "monolith",
-  "quality": null,
-  "winning_rung": null,
-  "parse_method": "",
-  "failure_reason": "no_items",
-  "page_count": null,
-  "item_count": 0,
-  "items": []
+  "quality": {
+    "garbage_titles": 0,
+    "repaired_titles": 0,
+    "matter_files": 0,
+    "seg_smell": null
+  },
+  "winning_rung": "text:auto",
+  "parse_method": "text_items",
+  "failure_reason": null,
+  "page_count": 2,
+  "item_count": 3,
+  "items": [
+    {
+      "number": "1",
+      "title": "CALL TO ORDER",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "2",
+      "title": "TOUR",
+      "page_start": 1,
+      "attachments": 0
+    },
+    {
+      "number": "3",
+      "title": "ADJOURNMENT",
+      "page_start": 2,
+      "attachments": 0
+    }
+  ]
 }
