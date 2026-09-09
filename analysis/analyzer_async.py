@@ -16,21 +16,22 @@ Rate limiting is handled by the summarizer via Gemini's retry instructions.
 """
 
 import asyncio
-import math
 import os
 import tempfile
+import threading
 import time
 from typing import AsyncIterator, List, Dict, Any, Optional, Tuple, cast
 from urllib.parse import urljoin
 
 import aiohttp
-import fitz
 
 from corpus.store import get_corpus
 from exceptions import DocumentDownloadError, ExtractionError, LLMError
-from parsing.memory_budget import wait_for_memory_async
-from parsing.pdf import PdfExtractor, extract_document_file
-from parsing.subprocess_guard import GuardCrashed, GuardTaskError, GuardTimeout, run_guarded
+from parsing.memory_budget import ReservedBytes, reserve_memory_async
+from parsing.pdf import PdfExtractor, extract_document_file, pdf_page_count
+from parsing.subprocess_guard import (
+    GuardCrashed, GuardTaskError, GuardTimeout, run_guarded, run_guarded_thread,
+)
 from parsing.participation import parse_participation_info
 from analysis.llm.summarizer import GeminiSummarizer
 from analysis.llm.input_budget import (
@@ -58,24 +59,25 @@ logger = get_logger(__name__).bind(component="pipeline")
 # an 889-page scan is a normal document rather than a crash (measured 514s,
 # ~0.58s/page). The guard therefore scales too: a floor for small files, a
 # per-page allowance with ~2.5x headroom over the measured rate, and a hard
-# ceiling that still fits under the job timeout. Page count comes from the
-# PDF trailer, which is cheap to read in the parent before spawning.
+# ceiling that still fits under the job timeout. Page count is inspected in
+# a separate guarded child: even reading a trailer can invoke native repair.
 DOCUMENT_EXTRACTION_TIMEOUT_SECONDS = 600
 DOCUMENT_EXTRACTION_SECONDS_PER_PAGE = 1.5
 DOCUMENT_EXTRACTION_BASE_SECONDS = 300
 DOCUMENT_EXTRACTION_MAX_SECONDS = 2400
-DOCUMENT_EXTRACTION_OUTER_GRACE_SECONDS = 20
+DOCUMENT_INSPECTION_TIMEOUT_SECONDS = 30
 
 
-def extraction_timeout_for(document_path: str) -> float:
-    """Guard timeout sized to the document's page count."""
+def extraction_timeout_for(document_path: str, *, cancel_event=None) -> float:
+    """Size the deadline through guarded inspection; call from a worker thread."""
     if not document_path.lower().endswith(".pdf"):
         return DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
-    try:
-        with fitz.open(document_path) as doc:
-            pages = len(doc)
-    except Exception:  # Unreadable trailer: the child will report the real error
-        return DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
+    pages = run_guarded(
+        pdf_page_count, (document_path,),
+        timeout=DOCUMENT_INSPECTION_TIMEOUT_SECONDS,
+        rlimit_bytes=512 * 1024 * 1024,
+        cancel_event=cancel_event,
+    )
     scaled = DOCUMENT_EXTRACTION_BASE_SECONDS + DOCUMENT_EXTRACTION_SECONDS_PER_PAGE * pages
     return float(min(DOCUMENT_EXTRACTION_MAX_SECONDS, max(DOCUMENT_EXTRACTION_TIMEOUT_SECONDS, scaled)))
 
@@ -86,94 +88,52 @@ def _extract_best_pdf_link(html_bytes: bytes, base_url: str) -> Optional[str]:
     return links[0] if links else None
 
 
-def _extract_pdf_in_subprocess(document_path, ocr_threshold, ocr_dpi,
-                               detect_legislative_formatting, max_ocr_workers):
-    """Run document extraction in an isolated, resource-capped subprocess.
+def _extract_pdf_in_subprocess(
+    document_path, ocr_threshold, ocr_dpi, detect_legislative_formatting,
+    max_ocr_workers, *, cancel_event: Optional[threading.Event] = None,
+):
+    """Inspect and extract behind the guard with one shared wall-clock budget.
 
-    Thin translation over parsing.subprocess_guard.run_guarded -- the shared
-    containment used by every heavy PDF path (this one and the sync chunker).
-    The guard owns the forkserver, RLIMIT_AS, oom_score_adj, kill-on-timeout,
-    and queue-drain-before-join mechanics; this wrapper owns only the
-    extraction-flavored budget and error surface.
-
-    1.5GB budget rationale (3.8GB RAM + 6GB swap box):
-    - Parent no longer holds PDF bytes during extraction (tempfile handoff)
-    - Up to 6 concurrent children (pdf_semaphore=6)
-    - 6 * 1.5GB = 9GB child ceiling
-    - Parent (~200-300MB) + postgres (~700MB) + system (~200MB) = ~1.2GB
-    - Total: ~10.2GB vs ~9.7GB available -- safe because not all 6 hit ceiling
-    - Normal PDFs use 200-350MB; only monster 1000+ page OCR jobs hit the cap
-
-    The child imports parsing.pdf (the guard target's module), not this
-    module -- spawns no longer pay for the analyzer's HTTP/LLM import stack.
+    Admission and the optional crash recovery consume the same deadline.
+    The async owner signals cancellation and waits for this thread to reap
+    its child before releasing its tempfile or concurrency slot.
     """
-    args = (
-        document_path,
-        ocr_threshold,
-        ocr_dpi,
-        detect_legislative_formatting,
-        max_ocr_workers,
-    )
     started = time.monotonic()
-    timeout_seconds = extraction_timeout_for(document_path)
     try:
-        return run_guarded(
-            extract_document_file,
-            args,
-            timeout=timeout_seconds,
-            rlimit_bytes=int(1.5 * 1024 * 1024 * 1024),
-        )
-    except GuardTimeout:
-        raise ExtractionError(
-            f"Document extraction subprocess timed out after {timeout_seconds:.0f}s"
-        )
-    except GuardCrashed as e:
-        # Drawing inspection is the highest-risk native MuPDF operation in
-        # this path. Some otherwise readable, graphics-heavy PDFs crash there
-        # while plain text extraction succeeds. Retry once in a fresh guarded
-        # child without redline geometry; never retry a crash in-process.
-        if detect_legislative_formatting and document_path.lower().endswith(".pdf"):
-            remaining_timeout = max(
-                1,
-                math.ceil(timeout_seconds - (time.monotonic() - started)),
+        timeout_seconds = extraction_timeout_for(document_path, cancel_event=cancel_event)
+    except (GuardTimeout, GuardCrashed, GuardTaskError) as exc:
+        raise ExtractionError(f"Document inspection failed: {exc}") from exc
+    deadline = started + timeout_seconds
+    formatting = detect_legislative_formatting
+    for attempt in range(2):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ExtractionError("Document extraction exhausted its shared deadline")
+        try:
+            return run_guarded(
+                extract_document_file,
+                (document_path, ocr_threshold, ocr_dpi, formatting, max_ocr_workers),
+                timeout=remaining,
+                rlimit_bytes=int(1.5 * 1024 * 1024 * 1024),
+                cancel_event=cancel_event,
             )
-            logger.warning(
-                "guarded PDF extraction crashed; retrying without legislative geometry",
-                exit_code=e.exitcode,
-                remaining_timeout=remaining_timeout,
-            )
-            try:
-                return run_guarded(
-                    extract_document_file,
-                    (
-                        document_path,
-                        ocr_threshold,
-                        ocr_dpi,
-                        False,
-                        max_ocr_workers,
-                    ),
-                    timeout=remaining_timeout,
-                    rlimit_bytes=int(1.5 * 1024 * 1024 * 1024),
+        except GuardTimeout as exc:
+            raise ExtractionError(
+                f"Document extraction exhausted its {timeout_seconds:.0f}s "
+                f"admission/execution budget: {exc}"
+            ) from exc
+        except GuardCrashed as exc:
+            if attempt == 0 and formatting and document_path.lower().endswith(".pdf"):
+                logger.warning(
+                    "guarded PDF extraction crashed; retrying without legislative geometry",
+                    exit_code=exc.exitcode,
+                    remaining_timeout=max(0, deadline - time.monotonic()),
                 )
-            except GuardTimeout:
-                raise ExtractionError(
-                    "Document extraction fallback exhausted the shared 600s budget"
-                )
-            except GuardCrashed as fallback_error:
-                raise ExtractionError(
-                    "Document extraction subprocess crashed twice "
-                    f"(exit codes {e.exitcode}, {fallback_error.exitcode})"
-                )
-            except GuardTaskError as fallback_error:
-                raise ExtractionError(
-                    "Document extraction fallback failed: "
-                    f"{fallback_error} ({fallback_error.error_type})"
-                )
-        raise ExtractionError(
-            f"Document extraction subprocess crashed (exit code {e.exitcode})"
-        )
-    except GuardTaskError as e:
-        raise ExtractionError(f"Document extraction failed: {e} ({e.error_type})")
+                formatting = False
+                continue
+            raise ExtractionError(f"Document extraction subprocess crashed: {exc}") from exc
+        except GuardTaskError as exc:
+            raise ExtractionError(f"Document extraction failed: {exc} ({exc.error_type})") from exc
 
 
 class AnalysisError(Exception):
@@ -426,14 +386,17 @@ class AsyncAnalyzer:
                                 continue
                             raise error
                         content_length = int(resp.headers.get("Content-Length") or 0)
+                        reservation = None
                         if content_length > config.DOWNLOAD_MEMORY_GATE_BYTES:
-                            # The body, its temp-file copy, and the archive
-                            # upload overlap in memory; wait for room rather
-                            # than stack eight large packets at once.
-                            await wait_for_memory_async(
-                                content_length * 2 + config.EXTRACTION_MIN_AVAILABLE_BYTES
-                            )
-                        raw_bytes = await resp.read()
+                            reservation = await reserve_memory_async(content_length * 2)
+                        try:
+                            raw_bytes = await resp.read()
+                            if reservation is not None:
+                                raw_bytes = ReservedBytes(raw_bytes, reservation)
+                        except BaseException:
+                            if reservation is not None:
+                                reservation.release()
+                            raise
                         content_type = resp.headers.get("Content-Type", "")
                         return DocumentResponse(
                             data=raw_bytes,
@@ -618,28 +581,13 @@ class AsyncAnalyzer:
                 # artifact here would keep a second full document copy resident
                 # in the parent for the child's entire lifetime.
                 del artifact
-                extraction_timeout = extraction_timeout_for(document_path)
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        _extract_pdf_in_subprocess,
-                        document_path,
-                        self.pdf_extractor.ocr_threshold,
-                        self.pdf_extractor.ocr_dpi,
-                        self.pdf_extractor.detect_legislative_formatting,
-                        self.pdf_extractor.max_ocr_workers,
-                    ),
-                    timeout=extraction_timeout + DOCUMENT_EXTRACTION_OUTER_GRACE_SECONDS,
-                )
-            except asyncio.TimeoutError:
-                logger.error(
-                    "document extraction timed out",
-                    url=safe_url[:100],
-                    timeout_seconds=extraction_timeout,
-                )
-                raise ExtractionError(
-                    f"Document extraction timed out: {safe_url[:100]}",
-                    document_url=safe_url,
-                    document_type=document_format.value,
+                result = await run_guarded_thread(
+                    _extract_pdf_in_subprocess,
+                    document_path,
+                    self.pdf_extractor.ocr_threshold,
+                    self.pdf_extractor.ocr_dpi,
+                    self.pdf_extractor.detect_legislative_formatting,
+                    self.pdf_extractor.max_ocr_workers,
                 )
             finally:
                 try:

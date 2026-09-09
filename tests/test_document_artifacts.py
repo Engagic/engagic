@@ -533,7 +533,7 @@ def test_office_extraction_uses_sniffed_temp_suffix(monkeypatch):
     async def acquire(url, banana=None):
         return artifact
 
-    def extract(path, *args):
+    def extract(path, *args, **kwargs):
         observed["suffix"] = Path(path).suffix
         return {
             "success": True,
@@ -566,7 +566,7 @@ def test_extraction_releases_artifact_before_guarded_child(monkeypatch):
             content_sha256=content_sha,
         )
 
-    def extract(path, *args):
+    def extract(path, *args, **kwargs):
         del path, args
         assert not any(
             isinstance(referrer, DocumentArtifact)
@@ -602,7 +602,7 @@ def test_partial_extraction_is_not_returned_for_summarization(monkeypatch):
             content_sha256=sha256_hex(data),
         )
 
-    def extract(path, *args):
+    def extract(path, *args, **kwargs):
         return {
             "success": True,
             "text": "readable pages plus one missing scan",
@@ -639,6 +639,7 @@ def test_guarded_pdf_crash_retries_without_legislative_geometry(monkeypatch):
         }
 
     monkeypatch.setattr(analyzer_module, "run_guarded", guarded)
+    monkeypatch.setattr(analyzer_module, "extraction_timeout_for", lambda *args, **kwargs: 600)
 
     result = analyzer_module._extract_pdf_in_subprocess(
         "/tmp/problem.pdf", 100, 150, True, 3
@@ -646,27 +647,29 @@ def test_guarded_pdf_crash_retries_without_legislative_geometry(monkeypatch):
 
     assert result["text"] == "complete fallback extraction"
     assert [entry[1][3] for entry in calls] == [True, False]
-    assert all(entry[2]["timeout"] == 600 for entry in calls)
+    assert all(599 < entry[2]["timeout"] <= 600 for entry in calls)
 
 
 def test_guarded_pdf_fallback_shares_the_outer_timeout_budget(monkeypatch):
     calls = []
-    monotonic = iter([100.0, 325.25])
+    now = [100.0]
 
     def guarded(call, args, **kwargs):
         calls.append(kwargs["timeout"])
         if len(calls) == 1:
+            now[0] = 325.25
             raise GuardCrashed("late native crash", exitcode=-11)
         return {"success": True, "text": "fallback", "method": "pymupdf"}
 
     monkeypatch.setattr(analyzer_module, "run_guarded", guarded)
-    monkeypatch.setattr(analyzer_module.time, "monotonic", lambda: next(monotonic))
+    monkeypatch.setattr(analyzer_module, "extraction_timeout_for", lambda *args, **kwargs: 600)
+    monkeypatch.setattr(analyzer_module.time, "monotonic", lambda: now[0])
 
     analyzer_module._extract_pdf_in_subprocess(
         "/tmp/problem.pdf", 100, 150, True, 3
     )
 
-    assert calls == [600, 375]
+    assert calls == [600, 374.75]
 
 
 def test_session_rotation_waits_for_each_sessions_final_request(monkeypatch):
@@ -800,3 +803,45 @@ def test_transient_connection_failure_retries_once(monkeypatch):
     assert artifact.document_format is DocumentFormat.PDF
     assert len(session.requests) == 2
     assert sleeps == [(0, None)]
+
+
+def test_large_download_holds_capacity_until_bytes_are_released(monkeypatch):
+    from config import config
+    from parsing import memory_budget
+
+    data = b'%PDF-1.7 memory-budget'
+    monkeypatch.setattr(config, 'DOWNLOAD_MEMORY_GATE_BYTES', 1)
+    monkeypatch.setattr(memory_budget, 'available_bytes', lambda: None)
+    session = _Session([_Response(data, headers={'Content-Length': str(len(data))})])
+    analyzer = AsyncAnalyzer(enable_llm=False)
+    _configure_http(monkeypatch, analyzer, session)
+    artifact = asyncio.run(analyzer.acquire_document_async('https://example.test/a.pdf'))
+    assert memory_budget._reserved_bytes == 2 * len(data)
+    retained_bytes = artifact.data
+    del artifact
+    gc.collect()
+    assert memory_budget._reserved_bytes == 2 * len(data)
+    assert retained_bytes == data
+    del retained_bytes
+    gc.collect()
+    assert memory_budget._reserved_bytes == 0
+
+
+def test_cancelled_download_releases_capacity(monkeypatch):
+    from config import config
+    from parsing import memory_budget
+
+    monkeypatch.setattr(config, 'DOWNLOAD_MEMORY_GATE_BYTES', 1)
+    monkeypatch.setattr(memory_budget, 'available_bytes', lambda: None)
+
+    class CancelledResponse(_Response):
+        async def read(self):
+            assert memory_budget._reserved_bytes == 200
+            raise asyncio.CancelledError
+
+    session = _Session([CancelledResponse(b'', headers={'Content-Length': '100'})])
+    analyzer = AsyncAnalyzer(enable_llm=False)
+    _configure_http(monkeypatch, analyzer, session)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(analyzer.acquire_document_async('https://example.test/a.pdf'))
+    assert memory_budget._reserved_bytes == 0

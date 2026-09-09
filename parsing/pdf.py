@@ -406,7 +406,10 @@ def _page_mark_runs(
     return page_runs, struck, underlined
 
 
-def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200, max_pages: int = 5) -> bool:
+def _has_legislative_legend(
+    doc: fitz.Document, proximity_chars: int = 200, max_pages: int = 5,
+    failed_pages: Optional[set[int]] = None,
+) -> bool:
     """Check if document contains legislative formatting legend (clustered keywords).
 
     A true legislative legend has all 4 keyword types appearing close together,
@@ -435,7 +438,13 @@ def _has_legislative_legend(doc: fitz.Document, proximity_chars: int = 200, max_
     # Search only first max_pages (legends appear early in documents)
     pages_to_search = min(len(doc), max_pages)
     for page_num in range(pages_to_search):
-        text = doc[page_num].get_text().lower()  # type: ignore[attr-defined]
+        try:
+            text = doc[page_num].get_text().lower()  # type: ignore[attr-defined]
+        except (RuntimeError, MemoryError) as exc:
+            if failed_pages is not None:
+                failed_pages.add(page_num + 1)
+            logger.warning("legend scan failed on page", page_num=page_num + 1, error=str(exc)[:200])
+            continue
 
         # Find all positions of each keyword type
         addition_positions = [m.start() for m in addition_pattern.finditer(text)]
@@ -476,7 +485,10 @@ def _redline_evidence_activates(struck_spans: int, underlined_spans: int) -> boo
     )
 
 
-def count_redline_evidence(doc: fitz.Document, max_pages: int = 30) -> Dict[str, int]:
+def count_redline_evidence(
+    doc: fitz.Document, max_pages: int = 30,
+    failed_pages: Optional[set[int]] = None,
+) -> Dict[str, int]:
     """Count geometric strikethrough/underline evidence across the document.
 
     Deterministic activation signal for legislative formatting: a thin filled
@@ -495,12 +507,18 @@ def count_redline_evidence(doc: fitz.Document, max_pages: int = 30) -> Dict[str,
     pages_scanned = 0
     for page_num in range(min(len(doc), max_pages)):
         pages_scanned += 1
-        lines = _detect_horizontal_lines(doc[page_num])
-        if not lines:
+        try:
+            lines = _detect_horizontal_lines(doc[page_num])
+            if not lines:
+                continue
+            _, page_struck, page_underlined = _page_mark_runs(
+                doc[page_num], detected_lines=lines
+            )
+        except (RuntimeError, MemoryError) as exc:
+            if failed_pages is not None:
+                failed_pages.add(page_num + 1)
+            logger.warning("geometry scan failed on page", page_num=page_num + 1, error=str(exc)[:200])
             continue
-        _, page_struck, page_underlined = _page_mark_runs(
-            doc[page_num], detected_lines=lines
-        )
         struck += page_struck
         underlined += page_underlined
         if _redline_evidence_activates(struck, underlined):
@@ -889,10 +907,10 @@ class PdfExtractor:
         # indistinguishable from operative language.
         use_formatting = False
         if self.detect_legislative_formatting:
-            legend = _has_legislative_legend(doc)
+            legend = _has_legislative_legend(doc, failed_pages=ocr_pending_pages)
             evidence = {"struck_spans": 0, "underlined_spans": 0, "pages_scanned": 0}
             if not legend:
-                evidence = count_redline_evidence(doc)
+                evidence = count_redline_evidence(doc, failed_pages=ocr_pending_pages)
             use_formatting = legend or _redline_evidence_activates(
                 evidence["struck_spans"], evidence["underlined_spans"]
             )
@@ -933,6 +951,9 @@ class PdfExtractor:
                 else:
                     page_text = cast(str, page.get_text(sort=True))  # type: ignore[attr-defined]
             except (RuntimeError, MemoryError) as exc:
+                # A readable fallback cannot prove that deleted language was
+                # preserved as deleted. Keep its text, but never certify it.
+                ocr_pending_pages.add(page_num + 1)
                 logger.warning(
                     "[PyMuPDF] page extraction failed, retrying plain text layer",
                     page_num=page_num + 1,
@@ -1259,6 +1280,16 @@ class PdfExtractor:
             return False
 
         return True
+
+
+def pdf_page_count(pdf_path: str) -> int:
+    """Guard-child metadata probe; native PDF inspection never runs in parent."""
+    try:
+        with fitz.open(pdf_path) as doc:
+            return len(doc)
+    except Exception:
+        # The extraction child reports the actionable document error.
+        return 0
 
 
 def extract_document_file(pdf_path: str, ocr_threshold: int, ocr_dpi: int,

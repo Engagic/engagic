@@ -4,6 +4,29 @@ Document parsing utilities for legislative PDF extraction. Treats PDF parsing as
 
 ## Files
 
+### subprocess_guard.py and memory_budget.py - Shared Work Capacity
+
+Extraction, chunking, and large downloads join one FIFO capacity queue per
+process. A worker takes capacity when it reaches the front and enough space
+is free, then returns it when finished. The pool is weighted: children use
+their address-space cap, and downloads above 32 MiB use twice their declared
+size while consumers retain the returned bytes. This bounds admissions before
+allocations appear in the kernel's memory readings.
+
+`ENGAGIC_WORK_MEMORY_BUDGET_MB` sets the shared capacity (default 2048 MiB).
+Linux admission additionally leaves `ENGAGIC_EXTRACTION_MIN_AVAILABLE_MB`
+headroom (default 700 MiB). These checks are conservative: resident memory can
+also count against outstanding reservations, reducing concurrency under
+pressure. The fixed pool still applies on platforms without `/proc/meminfo`.
+Admission waits at most `ENGAGIC_EXTRACTION_MEMORY_WAIT_SECONDS` (120 seconds),
+or the operation's remaining deadline, then fails without launching work.
+
+All native PDF inspection in the analyzer, including page counting, runs in
+resource-capped children. Inspection, admission, extraction, and crash recovery
+consume one document deadline. Async callers use `run_guarded_thread`, which
+signals cancellation and waits for child cleanup before releasing their
+temporary files and concurrency slots.
+
 ### pdf.py - Core PDF Extractor
 
 Primary extraction using PyMuPDF (fitz) with OCR fallback via Tesseract.
@@ -35,24 +58,29 @@ is_valid = extractor.validate_text(result["text"])
 {
     "success": bool,
     "text": str,              # Extracted text with --- PAGE N --- delimiters
-    "method": str,            # "pymupdf" or "pymupdf+ocr"
+    "method": str,            # "pymupdf" or "pymupdf+ocr", with "-partial" when incomplete
     "page_count": int,
     "extraction_time": float, # Seconds elapsed
     "ocr_pages": int,         # Pages where OCR actually improved over native text
+    "ocr_pending": int,       # Pages whose text/formatting could not be established
+    "ocr_pending_pages": list, # One-based page numbers, including failed formatting scans
     "links": list,            # Only present if extract_links=True
 }
 ```
 
 On failure, raises `ExtractionError` (from `exceptions` module).
+Recoverable page failures retain the other pages and mark the result partial.
+The analyzer refuses to summarize partial results; a plain-text fallback after
+a formatting failure cannot certify that deleted language was represented correctly.
 
 **Extraction pipeline:**
-1. **Pass 1** — Extract text from all pages (main thread, PyMuPDF is not thread-safe). Pages with < `ocr_threshold` chars are queued for OCR. Page images are pre-rendered to PNG bytes in the main thread.
-2. **Legislative check** — If `detect_legislative_formatting` is enabled, scans the first 5 pages for a formatting legend and up to 30 pages for geometric redline evidence. Activates `[DELETED: ...]` / `[ADDED: ...]` tagging for a legend, three independent strike marks, or a paired strike-and-underline change.
-3. **Pass 2** — Runs OCR in parallel via `ThreadPoolExecutor`. Uses `_is_ocr_better()` to decide whether OCR output replaces native text (requires 2x more chars with >40% letters, or more chars with >70% letters).
+1. **Legislative check** — With formatting detection enabled, scans the first 5 pages for a legend and up to 30 pages for geometric redline evidence. Scan failures are isolated per page.
+2. **Text and OCR** — Reads pages on the child process's main thread. Pages needing OCR are rendered and drained in groups of at most twice the OCR worker count. `_is_ocr_better()` decides whether OCR replaces the native layer.
+3. **Assembly** — Combines page text in order and records any pages whose text or formatting remains incomplete.
 
 **OCR safeguards:**
 - 100MP pixel limit (PIL `DecompressionBombWarning` converted to error)
-- 60s timeout per page, 300s total budget across all pages
+- 60s timeout per OCR page, 540s OCR budget per chunk, and a shared document guard deadline
 - `OMP_THREAD_LIMIT=1` to prevent Tesseract internal threading
 - Auto-detects worker count from CPU cores (capped at 4)
 

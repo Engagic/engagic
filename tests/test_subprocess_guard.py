@@ -164,3 +164,110 @@ def test_start_failure_is_not_masked(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def target_signals_then_sleeps(path):
+    from pathlib import Path
+    Path(path).touch()
+    time.sleep(30)
+
+
+def test_no_child_starts_after_admission_deadline(monkeypatch):
+    from parsing import memory_budget
+
+    monkeypatch.setattr(memory_budget, 'available_bytes', lambda: 0)
+
+    class NoSpawnContext:
+        def Queue(self):
+            pytest.fail('must not allocate a process queue without admission')
+
+    monkeypatch.setattr(subprocess_guard, '_forkserver_ctx', NoSpawnContext())
+    with pytest.raises(GuardTimeout, match='memory capacity'):
+        run_guarded(target_ok, (1, 2), timeout=0.03)
+    assert memory_budget._reserved_bytes == 0
+
+
+def test_admission_time_is_part_of_execution_deadline(monkeypatch):
+    from contextlib import contextmanager
+
+    now = [100.0]
+
+    @contextmanager
+    def slow_admission(*args, **kwargs):
+        now[0] += 8
+        yield
+
+    class NoSpawnContext:
+        def Queue(self):
+            pytest.fail('admission consumed the deadline, so no child may start')
+
+    monkeypatch.setattr(subprocess_guard, 'reserve_memory', slow_admission)
+    monkeypatch.setattr(subprocess_guard.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(subprocess_guard, '_forkserver_ctx', NoSpawnContext())
+    with pytest.raises(GuardTimeout, match='deadline'):
+        run_guarded(target_ok, (1, 2), timeout=5)
+
+
+def test_async_cancellation_reaps_child_and_returns_capacity(tmp_path, monkeypatch):
+    import asyncio
+    from parsing import memory_budget
+
+    real_ctx = subprocess_guard._forkserver_ctx
+    children = []
+
+    class RecordingContext:
+        def Queue(self):
+            return real_ctx.Queue()
+
+        def Process(self, **kwargs):
+            proc = real_ctx.Process(**kwargs)
+            children.append(proc)
+            return proc
+
+    monkeypatch.setattr(subprocess_guard, '_forkserver_ctx', RecordingContext())
+    ready = tmp_path / 'child-ready'
+
+    async def check():
+        task = asyncio.create_task(subprocess_guard.run_guarded_thread(
+            run_guarded, target_signals_then_sleeps, (str(ready),), timeout=20,
+        ))
+        try:
+            async with asyncio.timeout(10):
+                while not ready.exists():
+                    await asyncio.sleep(0.01)
+            assert memory_budget._reserved_bytes > 0
+        finally:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert not children[0].is_alive()
+        assert children[0].exitcode is not None
+        assert memory_budget._reserved_bytes == 0
+
+    asyncio.run(check())
+
+
+def test_async_cancellation_during_admission_never_spawns(monkeypatch):
+    import asyncio
+    from parsing import memory_budget
+
+    monkeypatch.setattr(memory_budget, 'available_bytes', lambda: 0)
+
+    class NoSpawnContext:
+        def Queue(self):
+            pytest.fail('cancelled admission must not start a child')
+
+    monkeypatch.setattr(subprocess_guard, '_forkserver_ctx', NoSpawnContext())
+
+    async def check():
+        task = asyncio.create_task(subprocess_guard.run_guarded_thread(
+            run_guarded, target_ok, (1, 2), timeout=20,
+        ))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert memory_budget._reserved_bytes == 0
+        assert not memory_budget._waiters
+
+    asyncio.run(check())

@@ -350,7 +350,7 @@ def test_extract_pdf_surfaces_corpus_persistence_failure(monkeypatch):
     monkeypatch.setattr(
         analyzer_module,
         "_extract_pdf_in_subprocess",
-        lambda *args: {
+        lambda *args, **kwargs: {
             "success": True,
             "text": "minutes text",
             "method": "pymupdf",

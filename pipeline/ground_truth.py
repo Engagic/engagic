@@ -22,7 +22,7 @@ from urllib.parse import urldefrag
 
 from config import config, get_logger
 from corpus.store import get_corpus, sha256_hex
-from parsing.subprocess_guard import GuardCrashed, GuardTimeout, run_guarded
+from parsing.subprocess_guard import GuardCrashed, GuardTimeout, run_guarded, run_guarded_thread
 from vendors.adapters.parsers.router import (
     ChunkResult,
     ENGINE_ERROR,
@@ -63,6 +63,8 @@ def _run_chunk_with_recovery(
     tmp_path: str,
     ladder: str,
     hint: Optional[str],
+    *,
+    cancel_event=None,
 ) -> tuple[ChunkResult, Optional[Dict[str, Any]]]:
     """Run the normal guard and its one reduced retry in the same worker.
 
@@ -76,6 +78,7 @@ def _run_chunk_with_recovery(
             (tmp_path, ladder, hint),
             timeout=config.CHUNKER_TIMEOUT_SECONDS,
             rlimit_bytes=_CHUNK_RLIMIT_BYTES,
+            cancel_event=cancel_event,
         ), None
     except GuardCrashed as first_crash:
         remaining = config.CHUNKER_TIMEOUT_SECONDS - (
@@ -93,6 +96,7 @@ def _run_chunk_with_recovery(
             (tmp_path, ladder),
             timeout=remaining,
             rlimit_bytes=_CHUNK_RLIMIT_BYTES,
+            cancel_event=cancel_event,
         )
         return result, {
             "trigger": "crash",
@@ -168,7 +172,7 @@ async def produce_ground_truth(
         # child. A pathological page wedges one child for at most the
         # timeout, never the pipeline (the 2026-06-29 freeze class).
         async with _chunk_guard_semaphore():
-            result, guard_recovery = await asyncio.to_thread(
+            result, guard_recovery = await run_guarded_thread(
                 _run_chunk_with_recovery,
                 tmp_path,
                 ladder,

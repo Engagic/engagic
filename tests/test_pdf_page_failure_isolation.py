@@ -18,7 +18,7 @@ def _two_page_pdf() -> bytes:
 
 
 def _extractor() -> PdfExtractor:
-    return PdfExtractor(ocr_enabled=False, detect_legislative_formatting=False)
+    return PdfExtractor(ocr_enabled=False)
 
 
 def test_realloc_failure_on_one_page_marks_it_partial(monkeypatch):
@@ -56,7 +56,7 @@ def test_document_level_failure_still_raises():
         _extractor().extract_from_bytes(b"%PDF-not-really")
 
 
-def test_extraction_timeout_scales_with_pages(tmp_path):
+def test_extraction_timeout_scales_with_pages(tmp_path, monkeypatch):
     from analysis.analyzer_async import (
         DOCUMENT_EXTRACTION_MAX_SECONDS,
         DOCUMENT_EXTRACTION_TIMEOUT_SECONDS,
@@ -73,6 +73,13 @@ def test_extraction_timeout_scales_with_pages(tmp_path):
     big = tmp_path / "big.pdf"
     big.write_bytes(document.tobytes())
     document.close()
+
+    # The forkserver child imports a fresh parsing module. Native inspection
+    # in this process is forbidden, including the timeout's metadata probe.
+    def forbidden_parent_open(*args, **kwargs):
+        raise AssertionError("PDF opened outside guarded child")
+
+    monkeypatch.setattr(fitz, "open", forbidden_parent_open)
     scaled = extraction_timeout_for(str(big))
     assert DOCUMENT_EXTRACTION_TIMEOUT_SECONDS < scaled <= DOCUMENT_EXTRACTION_MAX_SECONDS
     assert scaled == 300 + 1.5 * 900
@@ -81,3 +88,22 @@ def test_extraction_timeout_scales_with_pages(tmp_path):
     garbage.write_bytes(b"not a pdf")
     assert extraction_timeout_for(str(garbage)) == DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
     assert extraction_timeout_for("/tmp/x.docx") == DOCUMENT_EXTRACTION_TIMEOUT_SECONDS
+
+
+def test_geometry_scan_failure_preserves_text_but_cannot_certify_formatting(monkeypatch):
+    import parsing.pdf as pdf_module
+
+    original = pdf_module._detect_horizontal_lines
+
+    def failing_geometry(page):
+        if page.number == 1:
+            raise RuntimeError("code=2: geometry allocation failed")
+        return original(page)
+
+    monkeypatch.setattr(pdf_module, "_detect_horizontal_lines", failing_geometry)
+    result = _extractor().extract_from_bytes(_two_page_pdf())
+    assert result["success"] is True
+    assert "Page 1 council staff report" in result["text"]
+    assert "Page 2 council staff report" in result["text"]
+    assert result["ocr_pending_pages"] == [2]
+    assert result["method"].endswith("-partial")

@@ -16,16 +16,23 @@ docs/DEBT_CLASS_RADAR.md item 2, "siloed" flavor). Both extraction
 (analysis/analyzer_async.py) and the sync chunker
 (vendors/adapters/base_adapter_async.py) now dispatch through it.
 
-run_guarded() blocks; call it via asyncio.to_thread from async code.
+run_guarded() blocks; async callers use run_guarded_thread for cancellation
+that reaps the child before releasing the caller's resources.
 """
 
+import asyncio
 import multiprocessing
 import resource
+import threading
 import time
 from queue import Empty
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from parsing.memory_budget import wait_for_memory
+from parsing.memory_budget import (
+    MemoryAdmissionCancelled,
+    MemoryAdmissionTimeout,
+    reserve_memory,
+)
 
 # Forkserver over fork: children must not inherit the parent's event loop,
 # sockets, or DB pool fds. Over spawn: repeated launches skip re-running the
@@ -37,10 +44,9 @@ from parsing.memory_budget import wait_for_memory
 _forkserver_ctx = multiprocessing.get_context("forkserver")
 
 # Default address-space cap, inherited from the original extraction guard.
-# Rationale for 1.5GB on the 3.8GB RAM + 6GB swap box: children die cleanly
-# with MemoryError instead of OOM-killing the parent, and only monster
-# 1000+ page OCR jobs ever approach it. Call sites doing lighter work
-# (text-layer chunking) should pass a tighter cap.
+# Each child also holds this much of the shared work budget for its entire
+# lifetime. Lighter work (text-layer chunking, metadata inspection) passes a
+# tighter cap and consumes less of that same pool.
 DEFAULT_RLIMIT_BYTES = int(1.5 * 1024 * 1024 * 1024)
 
 # Give the parent this long to observe a child's exit after its result (or
@@ -54,6 +60,10 @@ class GuardError(Exception):
 
 class GuardTimeout(GuardError):
     """The child produced no result within the deadline and was killed."""
+
+
+class GuardCancelled(GuardError):
+    """The caller cancelled; admission stopped or the child was reaped."""
 
 
 class GuardCrashed(GuardError):
@@ -128,26 +138,46 @@ def run_guarded(
     *,
     timeout: float = 600.0,
     rlimit_bytes: int = DEFAULT_RLIMIT_BYTES,
+    cancel_event: Optional[threading.Event] = None,
 ) -> Any:
     """Run target(*args, **kwargs) in a resource-capped subprocess.
 
     target must be a module-level callable (pickled by reference; the child
     imports its module) and args/kwargs/return value must pickle. Blocks the
-    calling thread for up to `timeout` seconds.
+    calling thread for up to `timeout` seconds plus bounded child cleanup.
+    Admission, process startup and execution share that single deadline.
 
     Raises GuardTimeout (child killed after the deadline), GuardCrashed
     (child died silently -- segfault, OOM), or GuardTaskError (target raised;
     original message and type attached). Anything else propagates as-is.
     """
-    # Admission by available memory, not by count: the per-child RLIMIT is
-    # safe alone and unbounded in aggregate (8 x 1.5 GB on a 3.8 GB box).
-    wait_for_memory()
+    deadline = time.monotonic() + timeout
+    try:
+        with reserve_memory(rlimit_bytes, deadline=deadline, cancel_event=cancel_event):
+            return _run_reserved(target, args, kwargs, deadline, rlimit_bytes, cancel_event)
+    except MemoryAdmissionTimeout as exc:
+        raise GuardTimeout(str(exc)) from exc
+    except MemoryAdmissionCancelled as exc:
+        raise GuardCancelled(str(exc)) from exc
+
+
+def _run_reserved(target, args, kwargs, deadline, rlimit_bytes, cancel_event):
+    def check_deadline():
+        if cancel_event is not None and cancel_event.is_set():
+            raise GuardCancelled("Guarded work cancelled")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise GuardTimeout("Guarded work exhausted its admission/execution deadline")
+        return remaining
+
+    check_deadline()
     result_queue = _forkserver_ctx.Queue()
     proc = _forkserver_ctx.Process(
         target=_guard_worker,
         args=(result_queue, rlimit_bytes, target, args, kwargs or {}),
     )
     try:
+        check_deadline()
         proc.start()
 
         # Drain the queue BEFORE join: the queue rides a pipe (64KB buffer on
@@ -160,27 +190,19 @@ def run_guarded(
         # single blocking get would sit out the full timeout before anyone
         # noticed -- the predecessor of this module did exactly that, turning
         # every segfault into a silent 600s stall.
-        deadline = time.monotonic() + timeout
         target_name = getattr(target, "__name__", repr(target))
         result_msg = None
         while result_msg is None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                if proc.is_alive():
-                    proc.kill()
-                proc.join(timeout=10)
-                raise GuardTimeout(
-                    f"{target_name} subprocess timed out after {timeout:.0f}s"
-                )
+            remaining = check_deadline()
             try:
-                result_msg = result_queue.get(timeout=min(1.0, remaining))
+                result_msg = result_queue.get(timeout=min(0.1, remaining))
             except Empty:
                 if not proc.is_alive():
                     # Dead child. Its result may still be in flight through
                     # the feeder thread/pipe -- one final grace read before
                     # declaring a silent crash.
                     try:
-                        result_msg = result_queue.get(timeout=1.0)
+                        result_msg = result_queue.get(timeout=min(0.1, check_deadline()))
                     except Empty:
                         proc.join(timeout=10)
                         raise GuardCrashed(
@@ -189,10 +211,11 @@ def run_guarded(
                             exitcode=proc.exitcode,
                         )
 
-        proc.join(timeout=_JOIN_TIMEOUT_SECONDS)
+        check_deadline()
+        proc.join(timeout=min(_JOIN_TIMEOUT_SECONDS, check_deadline()))
         if proc.is_alive():
             proc.kill()
-            proc.join()
+            proc.join(timeout=_JOIN_TIMEOUT_SECONDS)
 
         if proc.exitcode != 0 and proc.exitcode is not None:
             raise GuardCrashed(
@@ -224,3 +247,30 @@ def run_guarded(
             result_queue.join_thread()
         except Exception:
             pass
+
+
+async def run_guarded_thread(target: Callable[..., Any], *args, **kwargs) -> Any:
+    """Offload a guard-owning function and reap its child before cancellation.
+
+    target must pass cancel_event through to every run_guarded call. Shielding
+    keeps asyncio cancellation from discarding the thread's cleanup; callers
+    may safely release temporary files and concurrency slots once this exits.
+    """
+    cancel_event = threading.Event()
+    task = asyncio.create_task(
+        asyncio.to_thread(target, *args, cancel_event=cancel_event, **kwargs)
+    )
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        cancel_event.set()
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if not task.cancelled():
+            task.exception()  # Retrieve any guard failure during cleanup.
+        raise
