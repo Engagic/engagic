@@ -17,6 +17,7 @@ Anything the arithmetic cannot confirm is abstained with a reason, never
 guessed. Confidence 7/10 overall; the named tier is the spike's gate.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -24,6 +25,7 @@ from parsing.rollcall.align import anchor_items, blocks
 from parsing.rollcall.attendance import Attendance, parse_attendance
 from parsing.rollcall.evidence import Evidence, find_evidence
 from parsing.rollcall.names import clean_name, fold
+from pipeline.filters import get_filter_decision
 
 
 class Gazetteer:
@@ -34,15 +36,25 @@ class Gazetteer:
         # One canonical spelling per folded name, so accented and plain
         # variants of the same member do not make their surname ambiguous.
         by_fold: Dict[str, str] = {}
+        surnames_only: List[str] = []
         for r in roster:
             cleaned = clean_name(r)
             if not cleaned:
                 continue
             parts = fold(cleaned).split()
+            if len(parts) == 1:
+                surnames_only.append(cleaned)
+                continue
             # "Klarissa J. Peña" and "Klarissa Peña" are one person: key on
             # first and last token so a middle initial cannot split them.
-            identity = parts[0] + " " + parts[-1] if len(parts) >= 2 else parts[0]
-            by_fold.setdefault(identity, cleaned)
+            by_fold.setdefault(parts[0] + " " + parts[-1], cleaned)
+        # A bare surname from an attendance line ("Balducci") is the same
+        # person as the roster's "Claudia Balducci"; only add it as its own
+        # member when no full name carries that surname.
+        known_last = {fold(full).split()[-1] for full in by_fold.values()}
+        for surname in surnames_only:
+            if fold(surname) not in known_last:
+                by_fold.setdefault(fold(surname), surname)
         self.canonical = sorted(by_fold.values())
         for full in self.canonical:
             parts = fold(full).split()
@@ -95,6 +107,53 @@ class MeetingParse:
     items_anchored: int = 0
     items_total: int = 0
     evidence_seen: int = 0
+    roster_source: str = "none"
+    procedural_skipped: int = 0
+
+
+# An agenda "item" that is really a section heading ("OLD BUSINESS:",
+# "ITEMS SCHEDULED FOR VOTING SESSIONS") owns no motion; a vote landing on
+# one is a misalignment, not a record.
+_HEADING_RE = re.compile(
+    r"^\s*(?:old|new|unfinished|other)\s+business\b|^\s*items?\s+(?:scheduled|for)\b"
+    r"|^\s*(?:consent|regular|public\s+hearing|discussion|action|information)\s+(?:agenda|items?|calendar)\b"
+    r"|^\s*(?:reports?|presentations?|proclamations?|communications?|announcements?)\s*:?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _is_heading(title: str) -> bool:
+    stripped = (title or "").strip()
+    if _HEADING_RE.search(stripped):
+        return True
+    # A short all-caps line ending in a colon is a heading, not an item.
+    return stripped.endswith(":") and len(stripped) < 60 and stripped == stripped.upper()
+
+
+def _membership_ok(movers: Sequence[str], gazetteer: "Gazetteer", present: Sequence[str]) -> bool:
+    """At least one named mover must be someone we are about to attribute to.
+
+    Cheap and decisive: a packet holding several bodies' minutes anchors a
+    committee motion under a council item, and the movers are the only names
+    in the sentence that say which body acted.
+    """
+    if not movers:
+        return True
+    known = {fold(n) for n in present} if present else {fold(n) for n in gazetteer.canonical}
+    resolved = [gazetteer.resolve(m) for m in movers]
+    named = [r for r in resolved if r]
+    if not named:
+        return False
+    return any(fold(r) in known for r in named)
+
+
+def _dedupe(names: Sequence[str]) -> List[str]:
+    """One row per member: a name repeated in an attendance line is one person."""
+    seen: Dict[str, str] = {}
+    for name in names:
+        if name:
+            seen.setdefault(fold(name), name)
+    return list(seen.values())
 
 
 def _tally_from_sections(ev: Evidence) -> Dict[str, int]:
@@ -134,21 +193,78 @@ def _gate_named(ev: Evidence, gazetteer: Gazetteer) -> Tuple[List[Tuple[str, str
     return votes, reasons
 
 
+def _self_consistent_names(evidence_by_block: List[List[Evidence]]) -> List[str]:
+    """Names to trust when the document is the only roster source.
+
+    A name counts when it appears in a named list whose size matches its
+    stated count, and it recurs in at least two such lists in the document.
+    A clerk's one-off typo cannot recur; a real member votes more than once.
+    """
+    seen: Dict[str, int] = {}
+    for evidence in evidence_by_block:
+        for ev in evidence:
+            for section in ev.sections:
+                if not section.names or (section.stated is not None and section.stated != len(section.names)):
+                    continue
+                for raw in section.names:
+                    key = fold(clean_name(raw))
+                    seen[key] = seen.get(key, 0) + 1
+                    seen.setdefault("display:" + key, 0)
+    counts = {k: v for k, v in seen.items() if not k.startswith("display:")}
+    trusted: Dict[str, str] = {}
+    for evidence in evidence_by_block:
+        for ev in evidence:
+            for section in ev.sections:
+                for raw in section.names:
+                    key = fold(clean_name(raw))
+                    if counts.get(key, 0) >= 2:
+                        trusted.setdefault(key, clean_name(raw))
+    return sorted(trusted.values())
+
+
 def parse_meeting(text: str, items: Sequence[Dict[str, Any]], roster: Sequence[str]) -> MeetingParse:
     attendance = parse_attendance(text)
     result = MeetingParse(attendance=attendance, items_total=len(items))
-    gazetteer = Gazetteer(list(roster) + attendance.present + attendance.absent)
-    present = [gazetteer.resolve(n) or clean_name(n) for n in attendance.present]
-    absent = [gazetteer.resolve(n) or clean_name(n) for n in attendance.absent]
 
     anchors = anchor_items(text, items)
     result.items_anchored = len(anchors)
-    for block in blocks(text, anchors):
-        evidence = find_evidence(text[block["start"]:block["end"]])
+    item_blocks = blocks(text, anchors)
+    evidence_by_block = [find_evidence(text[b["start"]:b["end"]]) for b in item_blocks]
+
+    names = list(roster) + attendance.present + attendance.absent
+    if not names:
+        names = _self_consistent_names(evidence_by_block)
+        result.roster_source = "named_lists" if names else "none"
+    else:
+        result.roster_source = "roster" if roster else attendance.source
+    gazetteer = Gazetteer(names)
+    present = _dedupe([gazetteer.resolve(n) or clean_name(n) for n in attendance.present])
+    absent = [n for n in _dedupe([gazetteer.resolve(n) or clean_name(n) for n in attendance.absent])
+              if n not in present]
+
+    for block, evidence in zip(item_blocks, evidence_by_block):
         if not evidence:
             continue
         result.evidence_seen += len(evidence)
+        # Approving the minutes or the agenda is not an accountability fact;
+        # the same filter that keeps these items out of summaries applies.
+        title = str(block["item"].get("title") or "")
+        if get_filter_decision(title) or _is_heading(title):
+            result.procedural_skipped += 1
+            continue
         ev = evidence[-1]
+        if ev.procedural:
+            # A motion to adjourn or reconvene rides at the end of whatever
+            # block it fell in; it is not a vote on that item.
+            result.procedural_skipped += 1
+            continue
+        if not _membership_ok(ev.movers, gazetteer, present):
+            result.abstained.append(Abstention(
+                item=block["item"],
+                reasons=[f"membership: mover not on this roster ({ev.movers[:2]})"],
+                motion_text=ev.result_text,
+            ))
+            continue
         motion_text = ev.result_text
         offset = block["start"] + ev.offset
 

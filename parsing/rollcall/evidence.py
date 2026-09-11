@@ -32,6 +32,11 @@ CATEGORY_CANON = {
     "abstention": "ABSTAIN", "abstentions": "ABSTAIN",
     "absent": "ABSENT", "excused": "EXCUSED", "recused": "RECUSED", "recusal": "RECUSED",
     "present": "PRESENT", "not voting": "NONVOTING",
+    # Recorded dissent that the clerk formats as its own label. Missing these
+    # publishes a unanimous vote over a dissent, the one error that matters most.
+    "deemed nay": "NO", "deemed no": "NO", "deemed aye": "AYE", "deemed yes": "AYE",
+    "voting no": "NO", "voting nay": "NO", "voting aye": "AYE", "voting yes": "AYE",
+    "dissenting": "NO",
 }
 _CATEGORY_WORDS = "|".join(sorted((re.escape(k) for k in CATEGORY_CANON), key=len, reverse=True))
 CATEGORY_LINE_RE = re.compile(
@@ -51,16 +56,50 @@ RESULT_RE = re.compile(
     r"|(?:carried|passed|failed|prevailed)\s+by\s+the\s*following\s*vote"
     r"|(?:this|the)\s+\w+\s+was\s+(?:adopted|approved|passed|placed\s+on\s+file|referred|held|denied)"
     r"|vote[sd]?\s*[:\-–]?\s*\d{1,2}\s*[-–/]\s*\d{1,2}"
-    r"|\bunanimous(?:ly)?\b"
+    r"|result\s*:\s*(?:passed|failed|adopted|approved|denied|carried)"
+    # "unanimous" only counts beside a vote word; "the unanimous request of
+    # the Board" is prose, not a roll call.
+    r"|(?:carried|passed|approved|adopted|voted|voting\s*:?|vote\s*:?)\s+unanimous(?:ly)?"
+    r"|unanimous(?:ly)?\s+(?:carried|passed|approved|adopted|vote)"
     r")",
     re.IGNORECASE,
 )
 _FAIL_RE = re.compile(r"\b(?:failed|defeated|denied|did\s+not\s+(?:carry|pass))\b", re.IGNORECASE)
 _PASS_RE = re.compile(r"\b(?:carried|passed|prevailed|approved|adopted|unanimous(?:ly)?|placed\s+on\s+file|referred|held)\b", re.IGNORECASE)
 TALLY_RE = re.compile(
-    r"(?<![\d./-])(?P<yes>\d{1,2})\s*[-–/]\s*(?P<no>\d{1,2})(?:\s*[-–/]\s*(?P<third>\d{1,2}))?(?![\d./-])"
+    r"(?<![\d./-])(?P<yes>\d{1,2})\s*(?:[-–/]|\bto\b)\s*(?P<no>\d{1,2})(?:\s*[-–/]\s*(?P<third>\d{1,2}))?(?![\d./-])",
+    re.IGNORECASE,
 )
-_TALLY_CONTEXT_RE = re.compile(r"(?:vote[sd]?|carried|passed|failed|motion|approved|adopted|denied|\()\s*[:,]?\s*$", re.IGNORECASE)
+# Who moved and seconded. Used as a cheap membership check: a motion moved by
+# someone who is not on the roster in play means this passage belongs to a
+# different body than the one we are about to attribute it to.
+# The lead-in is case-insensitive; the name is not, so a sentence fragment
+# cannot masquerade as a mover.
+_MOVER_RE = re.compile(
+    r"(?i:motion\s+(?:was\s+)?(?:made\s+)?by|(?:it\s+was\s+)?moved\s+by|on\s+a\s+motion\s+(?:of|by)"
+    r"|motion\s+offered\s+by|motion\s+of|duly\s+seconded\s+by|seconded\s+by|second\s+by|supported\s+by)"
+    r"\s+(?P<name>[A-Z][A-Za-z.'\u2019-]*(?:\s+[A-Z][A-Za-z.'\u2019-]*){0,3})",
+)
+# "X moved, seconded by Y" / "Lokensgard moved, seconded by Vargas"
+_MOVED_SUFFIX_RE = re.compile(r"\b(?P<name>[A-Z][A-Za-z.'\u2019-]+(?:\s+[A-Z][A-Za-z.'\u2019-]+)?)\s+moved\b")
+_PROCEDURAL_MOTION_RE = re.compile(
+    r"\bto\s+(?:adjourn|recess|reconvene|return\s+to\s+open\s+session|go\s+into\s+(?:closed|executive)\s+session)\b"
+    r"|\bthe\s+(?:meeting|board|committee|council)\s+be\s+adjourned\b|\badjournment\b",
+    re.IGNORECASE,
+)
+
+_ABSTENTION_MENTION_RE = re.compile(r"\babstain(?:ed|s|ing)?\b|\babstentions?\b|\brecus(?:ed|al)\b", re.IGNORECASE)
+# Unanimity beside a vote word, wherever it sits in the sentence: the result
+# anchor itself often stops at "carried", before "unanimously".
+_UNANIMOUS_RE = re.compile(
+    r"(?:carried|passed|approved|adopted|voted|voting|vote|consent)\s*:?\s*(?:\w+\s+){0,2}unanimous(?:ly)?"
+    r"|unanimous(?:ly)?\s+(?:carried|passed|approved|adopted|consent)",
+    re.IGNORECASE,
+)
+_TALLY_CONTEXT_RE = re.compile(
+    r"(?:vote[sd]?|voting|carried|passed|failed|motion|approved|adopted|denied|unanimously|result|\(|\[)\s*[:,]?\s*$",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -78,6 +117,8 @@ class Evidence:
     sections: List[Section] = field(default_factory=list)
     tally: Optional[Tuple[int, int, int]] = None  # (yes, no, other)
     unanimous: bool = False
+    movers: List[str] = field(default_factory=list)
+    procedural: bool = False               # a motion to adjourn, recess, reconvene
 
     @property
     def named(self) -> bool:
@@ -159,7 +200,7 @@ def find_evidence(block: str) -> List[Evidence]:
                 result_text=re.sub(r"\s+", " ", line.strip())[:300],
                 outcome=outcome,
                 offset=offsets[idx] + m.start(),
-                unanimous=bool(re.search(r"unanimous", window, re.IGNORECASE)),
+                unanimous=bool(_UNANIMOUS_RE.search(window)),
             )
             ev.sections = _parse_sections(lines, idx + 1, 14)
             if not ev.sections and idx > 0:
@@ -167,7 +208,19 @@ def find_evidence(block: str) -> List[Evidence]:
                 prior = _parse_sections(lines, max(0, idx - 8), 8)
                 if prior and all(s.value != "PRESENT" for s in prior):
                     ev.sections = prior
+            # Look back a few lines: the motion sentence usually precedes
+            # the result, and both sit inside the same passage.
+            context = " ".join(lines[max(0, idx - 4):idx + 2])
+            ev.movers = [m.group("name") for m in _MOVER_RE.finditer(context)]
+            ev.movers += [m.group("name") for m in _MOVED_SUFFIX_RE.finditer(context)]
+            ev.procedural = bool(_PROCEDURAL_MOTION_RE.search(context))
             ev.tally = _tally_near(lines, idx, line)
+            # "Motion Passed 5-0 with one abstention": somebody present did
+            # not vote aye, so attendance arithmetic cannot name the ayes.
+            if _ABSTENTION_MENTION_RE.search(window):
+                ev.unanimous = False
+            if ev.tally and _ABSTENTION_MENTION_RE.search(window):
+                ev.tally = (ev.tally[0], ev.tally[1], max(ev.tally[2], 1))
             found.append(ev)
             break
     return _dedupe(found)

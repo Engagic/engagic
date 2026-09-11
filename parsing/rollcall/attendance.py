@@ -22,6 +22,24 @@ from parsing.rollcall.names import split_names
 
 HEAD_CHARS = 6000
 
+# A present-list often runs straight into the next roster on the same
+# extracted line: "Members Present: A, B, C. Absent: D Guests attending: E".
+_INLINE_CUT_RE = re.compile(
+    r"\b(?:absent|excused|guests?|staff|also\s+present|others?\s+present|alternates?|"
+    r"also\s+in\s+attendance|not\s+present)\b\s*:?",
+    re.IGNORECASE,
+)
+
+# Words that mark a department, office or role rather than a person.
+_NOT_PERSON_RE = re.compile(
+    r"\b(?:parks?|recreation|departments?|dept|interns?|staff|city|county|planning|"
+    r"directors?|clerks?|attorneys?|engineers?|managers?|works|public|finance|library|police|"
+    r"fire|administrators?|administration|services|office|utilities|community|"
+    r"development|building|zoning|secretar(?:y|ies)|recorders?|treasurers?|assistants?|"
+    r"guests?|alternates?|liaisons?|consultants?|applicants?)\b",
+    re.IGNORECASE,
+)
+
 _LABEL_RE = re.compile(
     r"^[ \t]*(?:members?\s+|board\s+members?\s+|councilmembers?\s+|those\s+)?"
     r"(?P<kind>present|absent|excused)\b\s*[:\-–]?\s*(?:(?P<count>\d+)\s*[-–]\s*)?(?P<rest>.*)$",
@@ -39,6 +57,19 @@ _NARRATIVE_PRESENT_RE = re.compile(
 _NARRATIVE_ABSENT_RE = re.compile(
     r"(?P<names>[A-Z][^.:;]{3,200}?)\s+(?:were|was)\s+absent\b", re.DOTALL
 )
+# "...Council Members were present: Jack Sheard, Mark Stelk, ... Absent: Mike Paulick."
+# "Board members in attendance included Andrew Reynolds, Michael Telich and Brian LaFleur."
+_NAMES_AFTER_PRESENT_RE = re.compile(
+    r"(?:(?:were|was|members)\s+present|\bpresent)\s*(?:\bwere\b|\bwas\b|\bincluded\b|:)\s*"
+    r"(?P<names>[^.]{5,400}?)(?:\.\s|\bAbsent\b|$)",
+    re.DOTALL | re.IGNORECASE,
+)
+_IN_ATTENDANCE_RE = re.compile(
+    r"in\s+attendance\s+(?:were|included|was)\s*:?\s*(?P<names>[^.]{5,400}?)\.", re.DOTALL | re.IGNORECASE
+)
+_INLINE_ABSENT_RE = re.compile(r"\bAbsent\s*:\s*(?P<names>[^.\n]{2,200}?)(?:\.|\n|$)", re.IGNORECASE)
+# "Present were A, B" reaches the label path with the verb still attached.
+_LEADING_VERB_RE = re.compile(r"^\s*(?:were|was|are|is|included|include)\b\s*:?\s*", re.IGNORECASE)
 
 
 @dataclass
@@ -51,6 +82,14 @@ class Attendance:
     @property
     def known(self) -> bool:
         return bool(self.present)
+
+    def drop_staff(self) -> None:
+        """Remove role or department tokens that rode in on the same line."""
+        self.present = [n for n in self.present if not _NOT_PERSON_RE.search(n)]
+        self.absent = [n for n in self.absent if not _NOT_PERSON_RE.search(n)]
+
+    def plausible(self) -> bool:
+        return len(self.present) >= 2
 
 
 def _collect(lines: List[str], start: int) -> str:
@@ -85,6 +124,10 @@ def parse_attendance(text: str) -> Attendance:
         if rest and rest[0] in ".,:" and len(rest) < 3:
             continue
         blob = _collect([rest] + lines[i + 1:], 0) if rest else _collect(lines, i + 1) if i + 1 < len(lines) else ""
+        blob = _LEADING_VERB_RE.sub("", blob)
+        cut = _INLINE_CUT_RE.search(blob)
+        if cut and cut.start() > 0:
+            blob = blob[:cut.start()]
         names = split_names(blob)
         kind = m.group("kind").lower()
         if kind == "present" and names and not result.present:
@@ -94,13 +137,29 @@ def parse_attendance(text: str) -> Attendance:
         elif kind in ("absent", "excused") and names and not result.absent:
             result.absent = names
     if not result.present:
-        m = _NARRATIVE_PRESENT_RE.search(head[:3000])
-        if m:
-            names = split_names(m.group("names").replace("\n", " "))
+        for pattern in (_NAMES_AFTER_PRESENT_RE, _IN_ATTENDANCE_RE, _NARRATIVE_PRESENT_RE):
+            m = pattern.search(head[:4000])
+            if not m:
+                continue
+            blob = m.group("names").replace("\n", " ")
+            cut = _INLINE_CUT_RE.search(blob)
+            if cut and cut.start() > 0:
+                blob = blob[:cut.start()]
+            names = split_names(blob)
             if 2 <= len(names) <= 25:
                 result.present = names
                 result.source = "narrative"
-                a = _NARRATIVE_ABSENT_RE.search(head[:3000])
-                if a:
-                    result.absent = split_names(a.group("names").replace("\n", " "))[-3:]
+                break
+    result.drop_staff()
+    if result.present and not result.plausible():
+        result = Attendance()
+    if result.present and not result.absent:
+        a = _INLINE_ABSENT_RE.search(head[:4000]) or _NARRATIVE_ABSENT_RE.search(head[:4000])
+        if a:
+            blob = a.group("names").replace("\n", " ")
+            cut = _INLINE_CUT_RE.search(blob)
+            if cut and cut.start() > 0:
+                blob = blob[:cut.start()]
+            result.absent = split_names(blob)[-4:]
+            result.drop_staff()
     return result

@@ -192,7 +192,7 @@ Or use Cloudflare origin certificates (Full Strict mode).
 
 ## Cron Jobs
 
-Root crontab (`sudo crontab -l`) has 13 active jobs:
+Root crontab (`sudo crontab -l`) has 14 active jobs:
 
 | Schedule | Job |
 |---|---|
@@ -209,6 +209,7 @@ Root crontab (`sudo crontab -l`) has 13 active jobs:
 | Sundays 2 AM UTC | Watchlist sync |
 | Sundays 5 AM UTC | Minutes URL sweep (`scripts/sweep_minutes.py --days-back 120`) |
 | Daily 6 AM UTC | Minutes ingest into R2 corpus (`scripts/ingest_minutes.py --days-back 180 --limit 2000`) |
+| Daily 7 AM UTC | Minutes to votes (`scripts/parse_minutes_votes.py --apply --days-back 200`) |
 
 **Minutes supply** (scheduled 2026-09-11; built 2026-08-04): the daemon's resync
 window is 14 days but minutes are approved 2-4 weeks post-meeting, so
@@ -222,7 +223,12 @@ path (no LLM) and records the meeting-to-document link in `minutes_documents`
 minutes replacing drafts at the same URL are captured; deterministic failures
 are suppressed after three attempts, transient ones back off weekly; known
 HTML-only viewers (BoardBook, NovusAgenda) are excluded. Sweep before ingest.
-Logs: `/var/log/engagic/minutes_sweep.log`, `/var/log/engagic/minutes_ingest.log`.
+`scripts/parse_minutes_votes.py` then parses every linked document (per-city
+driver or the generic engine in `parsing/rollcall/`) and writes `votes`
+(source='minutes', receipts) and `matter_appearances` outcomes; it skips
+meetings that carry API votes and is idempotent. Sweep, ingest, votes, in
+that order. Logs: `/var/log/engagic/minutes_sweep.log`,
+`/var/log/engagic/minutes_ingest.log`, `/var/log/engagic/minutes_votes.log`.
 
 ---
 

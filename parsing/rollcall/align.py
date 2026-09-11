@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Sequence
 
+from parsing.rollcall.evidence import CATEGORY_LINE_RE, RESULT_RE
+
 _STOPWORDS = {
     "the", "a", "an", "of", "and", "or", "to", "for", "in", "on", "at", "by", "with",
     "from", "as", "is", "be", "that", "this", "city", "county", "council", "approve",
@@ -137,10 +139,64 @@ def anchor_items(text: str, items: Sequence[Any]) -> List[Anchor]:
     return _longest_increasing(anchors)
 
 
+# Procedural headings that carry their own motions (adjourn, reconvene,
+# approve the agenda) but rarely survive as agenda items. Any of them closes
+# the block that precedes it, so its motion is credited to nothing rather
+# than to the last substantive item.
+_BREAK_RE = re.compile(
+    r"^[ \t]*(?:\d+\.?|[A-Z]\.|[IVX]+\.|[a-z]\.)?\s*(?:"
+    r"ADJOURN(?:MENT)?\b|Meeting adjourned|The meeting (?:was )?adjourned|NEXT MEETING\b|"
+    r"RECONVENE\b|CLOSED SESSION\b|EXECUTIVE SESSION\b|RECESS\b|"
+    r"APPROVAL OF (?:THE )?(?:AGENDA|MINUTES)\b|CALL TO ORDER\b|ROLL CALL\b|PLEDGE\b|"
+    r"PUBLIC COMMENTS?\b|CITIZEN COMMENTS?\b|ANNOUNCEMENTS\b)",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+# A short line with no lowercase letters is a section heading ("VII.
+# ORDINANCES", "B. SECOND READING"). Crossing one means the block has left
+# its item, so it ends there; losing a vote beats crediting it to the wrong
+# item. A document typeset entirely in capitals yields no blocks at all,
+# which abstains rather than guesses.
+_CAPS_HEADING_RE = re.compile(r"^[ \t]*(?=[^a-z\n]*[A-Z])[A-Z0-9 .()\-&/',:]{4,60}$", re.MULTILINE)
+
+
+def _caps_heading(text: str, start: int, end: int) -> Optional[int]:
+    """First all-caps heading in the range that is not itself vote evidence.
+
+    Clerks print the record in capitals too ("RESULT: APPROVED BY UNANIMOUS
+    CONSENT", "NAYS: NONE"); cutting there would sever every block from the
+    vote it exists to carry.
+    """
+    for match in _CAPS_HEADING_RE.finditer(text, start, end):
+        line = match.group(0)
+        if CATEGORY_LINE_RE.match(line) or RESULT_RE.search(line):
+            continue
+        return match.start()
+    return None
+
+
+def _first_break(text: str, start: int, end: int) -> Optional[int]:
+    cuts = [m.start() for m in (_BREAK_RE.search(text, start, end),) if m]
+    caps = _caps_heading(text, start, end)
+    if caps is not None:
+        cuts.append(caps)
+    return min(cuts) if cuts else None
+
+
 def blocks(text: str, anchors: List[Anchor]) -> List[Dict[str, Any]]:
-    """[{item, start, end, rung}] covering each anchored item to the next anchor."""
+    """[{item, start, end, rung}] covering each anchored item to the next
+    anchor or the next section heading, whichever comes first."""
     out = []
     for i, anchor in enumerate(anchors):
         end = anchors[i + 1].start if i + 1 < len(anchors) else len(text)
+        # Skip past the anchor's own line so its heading never ends its block.
+        body = text.find("\n", anchor.start)
+        if body == -1 or body >= end:
+            out.append({"item": anchor.item, "start": anchor.start, "end": end, "rung": anchor.rung})
+            continue
+        cut = _first_break(text, body + 1, end)
+        if cut is not None:
+            end = cut
         out.append({"item": anchor.item, "start": anchor.start, "end": end, "rung": anchor.rung})
     return out

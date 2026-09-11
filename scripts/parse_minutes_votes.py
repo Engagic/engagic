@@ -39,6 +39,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from config import get_logger
 from corpus.store import close_corpus, get_corpus, init_corpus
 from database.db_postgres import Database
+from database.id_generation import generate_matter_id
 from database.vote_utils import compute_vote_tally, determine_vote_outcome
 from parsing.rollcall import DIALECTS, load_spike_parser, norm_file
 from parsing.rollcall.engine import parse_meeting
@@ -85,6 +86,19 @@ UPSERT_VOTE_SQL = """
         content_sha256 = EXCLUDED.content_sha256, receipt = EXCLUDED.receipt
     WHERE votes.source = 'minutes'
 """
+# An item the council voted on is a matter even when no vendor or text gave
+# it a file number; key it by normalized title (the PrimeGov-era fallback in
+# generate_matter_id) so the vote has a row to hang on. Generic titles
+# ("Approval of Minutes") return no id and stay unkeyed.
+CREATE_TITLE_MATTER_SQL = """
+    INSERT INTO city_matters (id, banana, title, first_seen, last_seen, appearance_count, status)
+    VALUES ($1, $2, $3, $4, $4, 1, 'active')
+    ON CONFLICT (id) DO UPDATE SET
+        last_seen = GREATEST(city_matters.last_seen, EXCLUDED.last_seen),
+        updated_at = CURRENT_TIMESTAMP
+"""
+LINK_ITEM_SQL = "UPDATE items SET matter_id = $1 WHERE id = $2 AND matter_id IS NULL"
+
 UPSERT_APPEARANCE_SQL = """
     INSERT INTO matter_appearances (matter_id, meeting_id, item_id, appeared_at, vote_outcome, vote_tally)
     VALUES ($1, $2, $3, $4, $5, $6)
@@ -225,8 +239,18 @@ async def main() -> int:
                 new_names: List[str] = []
             else:
                 published, new_names = via_engine(text, items, roster, sha, counts, reasons)
-            unlinked = sum(1 for p in published.values() if not p.matter_id)
-            counts["published_without_matter"] += unlinked
+            titles = {i["id"]: i["title"] for i in items}
+            to_create: List[Tuple[str, str, str]] = []
+            for pub in published.values():
+                if pub.matter_id:
+                    continue
+                matter_id = generate_matter_id(row["banana"], title=titles.get(pub.item_id) or "")
+                if matter_id:
+                    pub.matter_id = matter_id
+                    to_create.append((matter_id, pub.item_id, titles[pub.item_id]))
+                    counts["title_keyed_matters"] += 1
+                else:
+                    counts["generic_title_unkeyed"] += 1
             published = {k: v for k, v in published.items() if v.matter_id}
             counts["publishable_items"] += len(published)
             counts["vote_rows"] += sum(len(p.votes) for p in published.values())
@@ -237,6 +261,9 @@ async def main() -> int:
             await ensure_members(db, row["banana"], needed, roster)
             async with db.pool.acquire() as conn:
                 async with conn.transaction():
+                    for matter_id, item_id, title in to_create:
+                        await conn.execute(CREATE_TITLE_MATTER_SQL, matter_id, row["banana"], title, row["date"])
+                        await conn.execute(LINK_ITEM_SQL, matter_id, item_id)
                     for pub in published.values():
                         for seq, (member, canon) in enumerate(pub.votes, 1):
                             member_id = roster.get(member)

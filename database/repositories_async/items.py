@@ -126,7 +126,10 @@ class ItemRepository(BaseRepository):
             # ordering on a snapshotted row -- otherwise legislative-timeline
             # reads would drift away from the state that was actually summarized.
             # matter_id / matter_file / matter_type stay mutable so that a later,
-            # better matter-link can be attached without reprocessing.
+            # better matter-link can be attached without reprocessing. A sync
+            # that derives nothing (NULL) keeps the existing link: the minutes
+            # route keys voted items by title after the agenda sync ran, and a
+            # resync inside the window must not orphan those votes.
             await c.executemany(
                 """
                 INSERT INTO items (
@@ -147,9 +150,9 @@ class ItemRepository(BaseRepository):
                     body_text = CASE WHEN items.summary IS NOT NULL
                         THEN items.body_text
                         ELSE COALESCE(EXCLUDED.body_text, items.body_text) END,
-                    matter_id = EXCLUDED.matter_id,
-                    matter_file = EXCLUDED.matter_file,
-                    matter_type = EXCLUDED.matter_type,
+                    matter_id = COALESCE(EXCLUDED.matter_id, items.matter_id),
+                    matter_file = COALESCE(EXCLUDED.matter_file, items.matter_file),
+                    matter_type = COALESCE(EXCLUDED.matter_type, items.matter_type),
                     agenda_number = CASE WHEN items.summary IS NOT NULL
                         THEN items.agenda_number ELSE EXCLUDED.agenda_number END,
                     sponsors = CASE WHEN items.summary IS NOT NULL
