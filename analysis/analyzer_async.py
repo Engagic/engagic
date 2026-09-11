@@ -21,7 +21,7 @@ import tempfile
 import threading
 import time
 from typing import AsyncIterator, List, Dict, Any, Optional, Tuple, cast
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import aiohttp
 
@@ -80,6 +80,20 @@ def extraction_timeout_for(document_path: str, *, cancel_event=None) -> float:
     )
     scaled = DOCUMENT_EXTRACTION_BASE_SECONDS + DOCUMENT_EXTRACTION_SECONDS_PER_PAGE * pages
     return float(min(DOCUMENT_EXTRACTION_MAX_SECONDS, max(DOCUMENT_EXTRACTION_TIMEOUT_SECONDS, scaled)))
+
+
+def _unwrap_google_viewer(url: str) -> Optional[str]:
+    """The wrapped document URL for a docs.google.com viewer/gview page, else None."""
+    try:
+        parsed = urlparse(url or "")
+    except ValueError:
+        return None
+    if parsed.netloc != "docs.google.com" or not parsed.path.rstrip("/").endswith(("/gview", "/viewer")):
+        return None
+    inner = parse_qs(parsed.query).get("url", [None])[0]
+    if not inner or not inner.lower().startswith(("http://", "https://")):
+        return None
+    return inner
 
 
 def _extract_best_pdf_link(html_bytes: bytes, base_url: str) -> Optional[str]:
@@ -458,6 +472,14 @@ class AsyncAnalyzer:
             return artifact
 
         candidates = extract_document_links(artifact.data, artifact.source_url)
+        # Some cities (seen on Granicus MinutesViewer for danville-ca and
+        # sanleandro, not vendor-wide: bocaraton on the same product redirects
+        # straight to the PDF) redirect to a Google Docs embed,
+        # docs.google.com/gview?url=<pdf>. The embed page is a script shell
+        # with no text or links; the document is the url param.
+        embedded = _unwrap_google_viewer(artifact.source_url)
+        if embedded and embedded not in candidates:
+            candidates.insert(0, embedded)
         onbase_alt = None
         if "/Documents/ViewDocument/" in source_url:
             onbase_alt = source_url.replace(

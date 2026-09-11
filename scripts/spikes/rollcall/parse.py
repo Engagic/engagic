@@ -320,7 +320,9 @@ DEN_MOTION2 = re.compile(
     r"by the\s*following\s*vote:",
     re.S,
 )
-DEN_CATEGORY = re.compile(r"^(Aye|Nay|No|Abstain|Excused|Absent|Present|Recused):\s*$")
+# The names may share the category's line ("Aye:   Alvidrez, Flynn, ...") or
+# start on the next one, depending on which text extractor laid the PDF out.
+DEN_CATEGORY = re.compile(r"^(Aye|Nay|No|Abstain|Excused|Absent|Present|Recused):\s*(.*)$")
 DEN_TERMINAL = re.compile(r"\((\d+)\)\s*$")
 DEN_FILE = re.compile(r"^(\d{2}-\d{4})\b")
 DEN_FILE_IN_MOTION = re.compile(r"\b(\d{2}-\d{4})\b")
@@ -365,8 +367,15 @@ def parse_denver(text: str) -> list[Passage]:
             if cm:
                 value = canon_value(cm.group(1))
                 blob_lines, stated = [], None
-                j = i + 1
-                while j < len(block):
+                j = i
+                same_line = cm.group(2).strip()
+                if same_line:
+                    blob_lines.append(same_line)
+                    t = DEN_TERMINAL.search(same_line)
+                    if t:
+                        stated = int(t.group(1))
+                while stated is None and j + 1 < len(block):
+                    j += 1
                     nx = block[j].strip()
                     t = DEN_TERMINAL.search(nx)
                     blob_lines.append(nx)
@@ -376,7 +385,6 @@ def parse_denver(text: str) -> list[Passage]:
                     if DEN_CATEGORY.match(nx):
                         blob_lines.pop()
                         break
-                    j += 1
                 if stated is not None:
                     blob = DEN_TERMINAL.sub("", " ".join(blob_lines)).strip()
                     if blob.lower() in ("(none)", "none", ""):

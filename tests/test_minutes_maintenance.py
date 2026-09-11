@@ -614,6 +614,10 @@ def _fill_path_db(meeting, items, events, enqueue_calls):
             events.append(("fill", meeting_id, url))
             return "UPDATE 1"
 
+        async def fetch(self, query, *args):
+            assert query == sweep_minutes.FALLBACK_SQL
+            return []
+
     connection = Connection()
 
     class Meetings:

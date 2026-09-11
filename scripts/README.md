@@ -89,6 +89,14 @@ Backfill scripts for data completeness:
 - `backfill_matter_titles.py` - Fill missing matter titles from items
 - `backfill_vote_outcomes.py` - Compute vote outcomes from vote records
 - `backfill_committees.py` - Populate committee data
+- `relink_vendor_keyed_items.py` - Move items with a vendor matter_id but no matter_file onto the identifier cited in their text (dry run by default); copies children, deletes emptied matters
+
+## Minutes Route (votes without an API)
+
+- `sweep_minutes.py` - Fill `meetings.minutes_url` for past meetings beyond the sync window (cron weekly)
+- `ingest_minutes.py` - Pull minutes bytes into the R2 corpus and link them in `minutes_documents` (cron daily)
+- `parse_minutes_votes.py` - Parse ingested minutes into `votes` (per-member where the document supports it) and `matter_appearances` outcomes; dry run by default
+- `eval_rollcall.py` - Score the parser against API votes where both exist; gate consistency and `--audit` sample elsewhere
 
 ## Geographic & Demographic Data
 

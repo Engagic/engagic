@@ -192,7 +192,7 @@ Or use Cloudflare origin certificates (Full Strict mode).
 
 ## Cron Jobs
 
-Root crontab (`sudo crontab -l`) has 11 active jobs:
+Root crontab (`sudo crontab -l`) has 13 active jobs:
 
 | Schedule | Job |
 |---|---|
@@ -207,22 +207,22 @@ Root crontab (`sudo crontab -l`) has 11 active jobs:
 | Daily 1 PM UTC | Happening Today analysis (8am EST) |
 | Daily 2 PM UTC | Happening Today email (9am EST) |
 | Sundays 2 AM UTC | Watchlist sync |
+| Sundays 5 AM UTC | Minutes URL sweep (`scripts/sweep_minutes.py --days-back 120`) |
+| Daily 6 AM UTC | Minutes ingest into R2 corpus (`scripts/ingest_minutes.py --days-back 180 --limit 2000`) |
 
-**Not yet scheduled** (added 2026-08-04, run manually until cadence is proven):
-`scripts/sweep_minutes.py` fills `meetings.minutes_url` for meetings the 14-day
-resync window left behind (minutes often publish 2-4 weeks post-meeting; listing
-or API metadata for most adapters, including extra-vendor streams) — suggested
-weekly. ProudCity and CivicPlus may make one lightweight meeting-page request per
-candidate; WP Events queries its media API per event. No discovery path downloads
-documents, parses PDFs, or writes to the corpus.
-`scripts/ingest_minutes.py` pulls minutes bytes into the R2 corpus via the
-analyzer's extraction-only path (no LLM client or key); incomplete writes retry
-and completed stable URLs are revalidated every seven days by default so revised
-minutes are captured. Deterministic download and extraction failures retry
-weekly and are suppressed after three attempts for the current extractor
-version; transient network, rate-limit, and server failures continue with weekly
-backoff. Known HTML-only viewer URLs are excluded — suggested daily after sync.
-Sweep before ingest.
+**Minutes supply** (scheduled 2026-09-11; built 2026-08-04): the daemon's resync
+window is 14 days but minutes are approved 2-4 weeks post-meeting, so
+`scripts/sweep_minutes.py` re-fetches listings with a 120-day back-window and
+fills only `meetings.minutes_url` (listing or API metadata; ProudCity and
+CivicPlus may make one meeting-page request per candidate, WP Events queries
+its media API per event; no document downloads). `scripts/ingest_minutes.py`
+then pulls minutes bytes into the R2 corpus via the analyzer's extraction-only
+path (no LLM) and records the meeting-to-document link in `minutes_documents`
+(migration 040). Completed URLs are revalidated every seven days so approved
+minutes replacing drafts at the same URL are captured; deterministic failures
+are suppressed after three attempts, transient ones back off weekly; known
+HTML-only viewers (BoardBook, NovusAgenda) are excluded. Sweep before ingest.
+Logs: `/var/log/engagic/minutes_sweep.log`, `/var/log/engagic/minutes_ingest.log`.
 
 ---
 

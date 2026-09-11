@@ -713,12 +713,21 @@ class MeetingSyncOrchestrator:
             # adapter keeps it self-healing -- the items upsert overwrites
             # matter_file from every sync, so a value that is not re-derived on
             # each pass would be silently erased.
-            if not matter_file and not matter_id_vendor:
+            #
+            # A vendor matter_id does not suppress this. PrimeGov mints a fresh
+            # matter GUID per agenda (25,802 of 26,271 unkeyed PrimeGov matters
+            # appeared in exactly one meeting, measured 2026-09-11), so the
+            # text-cited number is the only handle that survives across
+            # meetings. generate_matter_id lets matter_file win, which re-keys
+            # such items on their next sync; the processor promotes an already
+            # summarized single appearance to canonical without an LLM call.
+            if not matter_file:
                 derived = extract_identifier(
                     item_data.get("title"), item_data.get("body_text")
                 )
                 if derived:
-                    matter_file, matter_type = derived
+                    matter_file, derived_type = derived
+                    matter_type = derived_type or matter_type
 
             matter_id = None
             if matter_file or matter_id_vendor:

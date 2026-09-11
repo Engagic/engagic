@@ -1,0 +1,8 @@
+DROP INDEX IF EXISTS idx_votes_item;
+DROP INDEX IF EXISTS uq_votes_member_matter_meeting_motion;
+ALTER TABLE votes DROP COLUMN IF EXISTS receipt;
+ALTER TABLE votes DROP COLUMN IF EXISTS content_sha256;
+ALTER TABLE votes DROP COLUMN IF EXISTS source;
+ALTER TABLE votes DROP COLUMN IF EXISTS motion_text;
+ALTER TABLE votes DROP COLUMN IF EXISTS motion_index;
+ALTER TABLE votes DROP COLUMN IF EXISTS item_id;

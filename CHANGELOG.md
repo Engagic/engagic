@@ -6,6 +6,91 @@ For architectural context, see CLAUDE.md and module READMEs.
 
 ---
 
+## [2026-09-11] Minutes Supply On, Matter-File Parity Pass, Vote Grain Migration
+
+Votes existed only where a vendor API handed them over (Legistar `/Votes`,
+Chicago), and the deterministic roll-call parser validated 2026-08-04 had
+nothing to read: `meetings.minutes_url` was filled on ~7% of recent meetings
+because the 14-day resync window closes before minutes are approved, and the
+sweep and ingest scripts were never scheduled. Two minutes documents were in
+the corpus.
+
+**Minutes supply.** `sweep_minutes.py` (weekly, 120-day window) and
+`ingest_minutes.py` (daily) are cron'd. Migration 040 adds `minutes_documents`
+(meeting to content_sha256, one row per revision) so the corpus text is
+reachable by meeting id rather than by URL identity. Ingest now treats memory
+admission timeouts as transient with a one-day retry, rejects HTML viewer
+shells under 500 chars instead of linking them as minutes, and the analyzer
+unwraps `docs.google.com/gview?url=` embeds (danville-ca, sanleandro; other
+cities on the same product redirect straight to the PDF). First run: 1,412
+to 7,300+ minutes URLs in three hours, ingest in progress.
+
+**Matter-file parity.** `parsing/identifiers.py` gains label-anchored
+Ordinance / Resolution / Bill numbers (title and first 300 body chars only,
+citations after "amending", "Assembly" etc. skipped), the leading file
+token that previously ran only on the PDF chunker path, parenthesised
+department codes, and prefixed year codes ("CU-26-012", "ZON-26-05-0014",
+"O-079-26"). File numbers no longer truncate "2026-07-V" to "2026". The sync
+funnel derives an identifier whenever the vendor gave no matter_file, even
+when it gave a matter_id: PrimeGov mints a fresh GUID per agenda (25,802 of
+26,271 unkeyed PrimeGov matters had one appearance), so the cited number is
+the only cross-meeting key. Backfill keyed 16,388 historical items into
+12,516 matters across 678 cities. Regression cases in
+`tests/test_identifiers.py`, every one from a real misfire.
+
+**Minutes route, first end-to-end run.** `parsing/rollcall.py` loads the
+spike parser and owns the banana-to-dialect table; the Denver driver now
+accepts names on the category line (our extractor lays "Aye: names (12)" on
+one line, the spike's fitz call split it). `scripts/eval_rollcall.py` scores
+parsed votes against the `votes` table where an API exists and reports
+publish-gate consistency plus an audit sample everywhere else, since for a
+minutes-only city the minutes are the record. Denver council minutes from
+the live corpus: precision 1.0, recall 0.976, outcome accuracy 1.0, every
+passage published; committee minutes use another template and are not yet
+covered. `scripts/parse_minutes_votes.py` writes votes (source='minutes',
+item_id, motion_text, byte-offset receipt) and appearance outcomes for
+meetings without API votes; final motion per item only until phase 2.
+
+**Generic minutes engine (`parsing/rollcall/`).** For every city without a
+template driver: `attendance.py` reads the roster off the document head
+(label, count, or narrative sentence), `align.py` anchors the meeting's own
+items in the text (file number, agenda number, title; anchors must stay in
+agenda order), `evidence.py` finds result sentences with their named
+category lists and tallies, and `engine.py` publishes at the attribution the
+page supports: per-member from named lists, per-member from a unanimous
+tally reconciled against attendance, outcome-and-tally otherwise. Names key
+on folded first and last tokens so "Klarissa J. Peña" and "Klarissa Pena"
+are one member. Every rule came from a reservoir document; regression cases
+in `tests/test_rollcall_engine.py`. The writer creates roster rows for
+members the minutes name (metadata source=minutes) and records the method
+on each vote and tally.
+
+**Supply fixes from the first full runs.** Sweep: 12,237 URLs filled, 4,360
+meetings missed because a retitled listing regenerates a different meeting
+id; the sweep now falls back to the single unfilled meeting with the same
+city and start datetime. Ingest: 177 documents already in the corpus under
+extractor version 1 were judged "not ready" and never linked; readiness now
+accepts compatible versions and already-held documents are linked without a
+refetch. Migration 042 sets the five child tables of city_matters to ON
+DELETE CASCADE as the schema file documents; live had SET NULL against NOT
+NULL columns, which made every matter delete fail.
+
+**Historical relink.** `scripts/relink_vendor_keyed_items.py` moved 4,178
+vendor-keyed items (Las Vegas, Long Beach, Oklahoma City lead) onto 2,811
+cited-identifier matters, 501 of them merging several per-agenda GUID
+matters into one, seeding each target from the newest source so no summary
+was lost. Every live FK onto city_matters is ON DELETE SET NULL against NOT
+NULL child columns while the schema file says CASCADE; the script deletes
+copied children explicitly before removing emptied parents.
+
+**Vote grain.** Migration 041 adds `item_id`, `motion_index`, `motion_text`,
+`source`, `content_sha256`, `receipt` to `votes` and a unique index including
+`motion_index`, keeping the old three-column constraint until every writer
+targets the new index (phase 2). Minutes carry several roll calls per item;
+the API-era schema could store one.
+
+---
+
 ## [2026-09-08] Provider-Neutral LLM Backends: GLM-5.3-flash Replaces Gemini Flash-Lite
 
 A year on one provider was allegiance, not a decision. The summarizer now

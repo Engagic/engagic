@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 import fitz
 
 from config import get_logger
+from parsing.identifiers import extract_leading_file_token
 
 logger = get_logger(__name__)
 
@@ -164,36 +165,16 @@ def repair_titles(items: List[Dict[str, Any]], pdf_path: str) -> int:
 
 # --- matter file numbers ------------------------------------------------------
 
-# Leading legislative file tokens ("2026-412 Approve...", "24-0123 Ordinance
-# amending..."). Conservative by design: 4-digit-year or 2-digit-year prefix
-# only, so "03-25" (a date) can never match. \b stops partial captures from
-# longer digit runs.
-_MATTER_FILE_RE = re.compile(r"^\s*((?:19|20)\d{2}-\d{1,6}|\d{2}-\d{3,6})\b")
-
-
 def extract_matter_file(title: Optional[str]) -> Optional[str]:
     """Leading legislative file number from an item title, or None.
 
     Chunker engines put whatever the document says into the title, and for
     many cities that starts with the matter file. Capturing it (separately
     from title repair, which strips it as noise) lets meeting_sync link the
-    item into the matters graph — the same store_matter / appearance-count /
-    summary-copy machinery API vendors use.
+    item into the matters graph. The regex lives in parsing.identifiers so
+    HTML-parsed items get the same harvest in the sync funnel.
     """
-    m = _MATTER_FILE_RE.match(title or "")
-    if not m:
-        return None
-    token = m.group(1)
-    # The remainder must carry a real word — bare numerics never link.
-    if not _WORD_RE.search((title or "")[m.end():]):
-        return None
-    # A year + valid-MMDD shape ("2026-0615") is a probable date, not a file.
-    first, _, second = token.partition("-")
-    if len(first) == 4 and len(second) == 4:
-        mm, dd = int(second[:2]), int(second[2:])
-        if 1 <= mm <= 12 and 1 <= dd <= 31:
-            return None
-    return token
+    return extract_leading_file_token(title)
 
 
 def extract_matter_files(items: List[Dict[str, Any]]) -> int:

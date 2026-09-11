@@ -49,10 +49,11 @@ CANDIDATES_SQL = """
 SOURCE_STATE_SQL = """
     SELECT DISTINCT ON (s.source_identity)
         s.source_identity,
+        s.content_sha256,
         (
             b.original_key IS NOT NULL
             AND b.text_key IS NOT NULL
-            AND b.extract_version = $2
+            AND b.extract_version = ANY($2::text[])
         ) AS corpus_ready,
         s.last_seen <= CURRENT_TIMESTAMP - make_interval(days => $3) AS recheck_due
     FROM document_source s
@@ -61,6 +62,25 @@ SOURCE_STATE_SQL = """
     ORDER BY s.source_identity, s.last_seen DESC, s.first_seen DESC
 """
 
+# Durable meeting -> minutes text link (migration 040). One row per revision;
+# the newest ingested_at is what the roll-call parser reads.
+LINK_SQL = """
+    INSERT INTO minutes_documents (meeting_id, content_sha256, source_identity)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (meeting_id, content_sha256) DO UPDATE
+        SET ingested_at = CURRENT_TIMESTAMP, source_identity = EXCLUDED.source_identity
+"""
+
+RELINK_SQL = """
+    INSERT INTO minutes_documents (meeting_id, content_sha256, source_identity)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (meeting_id, content_sha256) DO NOTHING
+"""
+
+# Extractor versions whose text the corpus serves as-is (corpus.store keeps
+# the same set); a blob at either is ready.
+COMPATIBLE_EXTRACT_VERSIONS = ["1", EXTRACT_VERSION]
+
 CORPUS_READY_SQL = """
     SELECT EXISTS (
         SELECT 1
@@ -68,7 +88,7 @@ CORPUS_READY_SQL = """
         WHERE content_sha256 = $1
           AND original_key IS NOT NULL
           AND text_key IS NOT NULL
-          AND extract_version = $2
+          AND extract_version = ANY($2::text[])
     )
 """
 
@@ -182,11 +202,27 @@ def unsupported_minutes_url_reason(url: str) -> str | None:
     return None
 
 
+def is_transient_failure(error: Exception) -> bool:
+    """Failures caused by the host, not the document: retry soon, never cap."""
+    if isinstance(error, DocumentDownloadError) and error.is_retryable:
+        return True
+    # The memory admission gate refuses extraction when the sync and other
+    # backfills hold the budget; the document itself is fine.
+    return isinstance(error, ExtractionError) and "memory capacity" in str(error)
+
+
 def failure_attempt_limit(error: Exception, configured_max: int) -> int:
     """Return the retry cap for a classified ingestion failure."""
-    if isinstance(error, DocumentDownloadError) and error.is_retryable:
+    if is_transient_failure(error):
         return UNBOUNDED_FAILURE_ATTEMPTS
     return configured_max
+
+
+# A minutes URL that resolves to an HTML page with less text than this is a
+# viewer shell (Granicus MinutesViewer wrapping a Google Docs embed, a portal
+# tab), not the minutes. Persisting the shell as "ingested" would hand the
+# roll-call parser an empty document and never retry the URL.
+MIN_HTML_MINUTES_CHARS = 500
 
 
 def failure_error_text(error: Exception, source_url: str) -> str:
@@ -285,10 +321,25 @@ async def main() -> int:
                 state_rows = await conn.fetch(
                     SOURCE_STATE_SQL,
                     identities,
-                    EXTRACT_VERSION,
+                    COMPATIBLE_EXTRACT_VERSIONS,
                     args.recheck_days,
                 )
         states = {r["source_identity"]: dict(r) for r in state_rows}
+        # Documents the corpus already holds (any compatible extractor
+        # version) are linked to their meetings without a refetch; the link
+        # is what the roll-call parser reads, and a first pass that judged
+        # the older version "not ready" left 177 of them unlinked.
+        relinked = 0
+        async with db.pool.acquire() as conn:
+            for r in rows:
+                state = states.get(attachment_identity(r["minutes_url"]))
+                if state and state["corpus_ready"] and state.get("content_sha256"):
+                    status = await conn.execute(
+                        RELINK_SQL, r["id"], state["content_sha256"], attachment_identity(r["minutes_url"])
+                    )
+                    relinked += status == "INSERT 0 1"
+        if relinked:
+            logger.info("linked already-ingested minutes", meetings=relinked)
         failure_rows = []
         if identities:
             async with db.pool.acquire() as conn:
@@ -344,11 +395,21 @@ async def main() -> int:
                         row["minutes_url"], banana=row["banana"]
                     )
                     content_sha256 = result.get("content_sha256")
+                    if (
+                        result.get("method") == "html_sanitized"
+                        and len(result.get("text") or "") < MIN_HTML_MINUTES_CHARS
+                    ):
+                        raise ExtractionError(
+                            "HTML minutes page is a viewer shell "
+                            f"({len(result.get('text') or '')} chars)",
+                            document_url=attachment_identity(row["minutes_url"]),
+                            document_type="html",
+                        )
                     ready = False
                     if content_sha256 and result.get("corpus_persisted"):
                         async with db.pool.acquire() as conn:
                             ready = await conn.fetchval(
-                                CORPUS_READY_SQL, content_sha256, EXTRACT_VERSION
+                                CORPUS_READY_SQL, content_sha256, COMPATIBLE_EXTRACT_VERSIONS
                             )
                     if not ready:
                         counts["failed_persist"] += 1
@@ -360,6 +421,10 @@ async def main() -> int:
                             content_sha256=(content_sha256 or "")[:16],
                         )
                         return
+                    async with db.pool.acquire() as conn:
+                        await conn.execute(
+                            LINK_SQL, row["id"], content_sha256, identity
+                        )
                     await clear_failure(db, identity)
                     counts["ingested"] += 1
                     logger.info(
@@ -402,7 +467,7 @@ async def main() -> int:
                         stage="extract",
                         error=e,
                         max_failures=args.max_failures,
-                        retry_days=args.failure_retry_days,
+                        retry_days=1 if is_transient_failure(e) else args.failure_retry_days,
                     )
                     logger.warning(
                         "minutes extraction failed",

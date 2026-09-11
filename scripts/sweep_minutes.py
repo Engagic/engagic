@@ -70,6 +70,15 @@ MEETING_STATE_SQL = """
     WHERE id = $1
 """
 
+# The stored id hashes vendor_id + date + title as they were at sync time; a
+# listing that later appended "* Special Start Time" to the title regenerates
+# a different id (20% of a 2026-09-11 sweep). Same city, same start datetime,
+# still unfilled, exactly one row: that is the meeting.
+FALLBACK_SQL = """
+    SELECT id FROM meetings
+    WHERE banana = $1 AND date = $2 AND minutes_url IS NULL
+"""
+
 
 def vendor_streams(city_row) -> list[tuple[str, str]]:
     """Primary plus valid, deduplicated extra-vendor streams."""
@@ -84,7 +93,7 @@ async def sweep_city(db, parse_date, city_row, days_back: int, dry_run: bool) ->
     banana = city_row["banana"]
     counts = {"fetched": 0, "with_minutes": 0, "would_fill": 0, "filled": 0,
               "enqueued": 0, "already_set": 0,
-              "id_miss": 0, "fetch_failed": 0,
+              "id_miss": 0, "id_fallback": 0, "fetch_failed": 0,
               "unsupported": 0}
 
     for vendor, slug in vendor_streams(city_row):
@@ -183,6 +192,15 @@ async def sweep_city(db, parse_date, city_row, days_back: int, dry_run: bool) ->
                     meeting = await db.meetings.get_meeting(
                         meeting_id, conn=conn, lock_for_update=True
                     )
+                    if meeting is None and meeting_date is not None:
+                        fallback = await conn.fetch(FALLBACK_SQL, banana, meeting_date)
+                        if len(fallback) == 1:
+                            meeting_id = fallback[0]["id"]
+                            meeting = await db.meetings.get_meeting(
+                                meeting_id, conn=conn, lock_for_update=True
+                            )
+                            if meeting is not None:
+                                counts["id_fallback"] += 1
                     if meeting is None:
                         counts["id_miss"] += 1
                         continue

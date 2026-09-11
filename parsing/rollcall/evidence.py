@@ -1,0 +1,184 @@
+"""Vote evidence inside one agenda item's slice of the minutes.
+
+Three shapes carry votes in the corpus, in descending attribution power:
+
+  named lists   "Aye: 12 - Flynn, Gilmore, ..." / "Ayes: Supervisor Tam - Two (2)"
+                "For: 4 - Champine, ..."  "Noes:"  "Absent: 1 - Romero Campbell"
+  tallies       "Motion carried (6-0)." / "Vote: 3-0-0" / "Motion passed 2/0"
+                "The motion carried, 6-0." / "Vote 6-0."
+  results       "The motion carried by the following vote:" / "MOTION CARRIED"
+                "carried unanimously" / "The motion failed"
+
+A result anchors an Evidence. Named lists within the following lines attach
+to it; a tally on the same or next line attaches to it. The publish gate in
+engine.py decides what any of it is worth.
+
+Confidence 7/10 on the regexes: every alternation came from a document in
+the 2026-09-11 reservoir survey, and the gate refuses anything the arithmetic
+cannot confirm.
+"""
+
+import re
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
+
+from parsing.rollcall.names import split_names
+
+CATEGORY_CANON = {
+    "for": "AYE", "aye": "AYE", "ayes": "AYE", "yes": "AYE", "yea": "AYE", "yeas": "AYE",
+    "in favor": "AYE", "favor": "AYE", "approve": "AYE",
+    "against": "NO", "nay": "NO", "nays": "NO", "no": "NO", "noes": "NO", "opposed": "NO",
+    "abstain": "ABSTAIN", "abstained": "ABSTAIN", "abstaining": "ABSTAIN",
+    "abstention": "ABSTAIN", "abstentions": "ABSTAIN",
+    "absent": "ABSENT", "excused": "EXCUSED", "recused": "RECUSED", "recusal": "RECUSED",
+    "present": "PRESENT", "not voting": "NONVOTING",
+}
+_CATEGORY_WORDS = "|".join(sorted((re.escape(k) for k in CATEGORY_CANON), key=len, reverse=True))
+CATEGORY_LINE_RE = re.compile(
+    rf"^[ \t]*(?P<cat>{_CATEGORY_WORDS})\s*[:,]\s*(?:(?P<count>\d+)\s*[-–]\s*)?(?P<rest>.*)$",
+    re.IGNORECASE,
+)
+_TRAILING_COUNT_RE = re.compile(
+    r"\s*[-–]?\s*(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen)\s*)?\((?P<count>\d+)\)\s*\.?\s*$",
+    re.IGNORECASE,
+)
+_BARE_COUNT_RE = re.compile(r"^\s*(\d+)\s*[-–]?\s*$")
+_NONE_RE = re.compile(r"^\s*\(?\s*(?:none|nil|n/a|-|0)\s*\)?\s*\.?\s*$", re.IGNORECASE)
+
+RESULT_RE = re.compile(
+    r"(?P<result>"
+    r"(?:the\s+)?motion\s+(?:to\s+\w+\s+)?(?:carried|passed|prevailed|failed|was\s+(?:approved|adopted|defeated|denied)|(?:was\s+)?approved|(?:was\s+)?adopted|(?:was\s+)?denied)"
+    r"|(?:carried|passed|failed|prevailed)\s+by\s+the\s*following\s*vote"
+    r"|(?:this|the)\s+\w+\s+was\s+(?:adopted|approved|passed|placed\s+on\s+file|referred|held|denied)"
+    r"|vote[sd]?\s*[:\-–]?\s*\d{1,2}\s*[-–/]\s*\d{1,2}"
+    r"|\bunanimous(?:ly)?\b"
+    r")",
+    re.IGNORECASE,
+)
+_FAIL_RE = re.compile(r"\b(?:failed|defeated|denied|did\s+not\s+(?:carry|pass))\b", re.IGNORECASE)
+_PASS_RE = re.compile(r"\b(?:carried|passed|prevailed|approved|adopted|unanimous(?:ly)?|placed\s+on\s+file|referred|held)\b", re.IGNORECASE)
+TALLY_RE = re.compile(
+    r"(?<![\d./-])(?P<yes>\d{1,2})\s*[-–/]\s*(?P<no>\d{1,2})(?:\s*[-–/]\s*(?P<third>\d{1,2}))?(?![\d./-])"
+)
+_TALLY_CONTEXT_RE = re.compile(r"(?:vote[sd]?|carried|passed|failed|motion|approved|adopted|denied|\()\s*[:,]?\s*$", re.IGNORECASE)
+
+
+@dataclass
+class Section:
+    value: str
+    names: List[str]
+    stated: Optional[int]
+
+
+@dataclass
+class Evidence:
+    result_text: str
+    outcome: Optional[str]                 # PASS / FAIL / None
+    offset: int                            # start of result_text in the block
+    sections: List[Section] = field(default_factory=list)
+    tally: Optional[Tuple[int, int, int]] = None  # (yes, no, other)
+    unanimous: bool = False
+
+    @property
+    def named(self) -> bool:
+        return any(s.names for s in self.sections)
+
+
+def _parse_sections(lines: List[str], start: int, limit: int) -> List[Section]:
+    sections: List[Section] = []
+    i = start
+    while i < min(len(lines), start + limit):
+        m = CATEGORY_LINE_RE.match(lines[i])
+        if not m:
+            if sections and lines[i].strip() == "":
+                # one blank line inside a list is layout; two end it
+                if i + 1 < len(lines) and lines[i + 1].strip() == "":
+                    break
+            i += 1
+            continue
+        value = CATEGORY_CANON[m.group("cat").lower()]
+        stated = int(m.group("count")) if m.group("count") else None
+        blob_parts = [m.group("rest").strip()]
+        j = i + 1
+        while j < len(lines) and j < i + 6:
+            nxt = lines[j]
+            if CATEGORY_LINE_RE.match(nxt) or RESULT_RE.search(nxt) or nxt.strip() == "":
+                break
+            bare = _BARE_COUNT_RE.match(nxt)
+            if bare:
+                stated = int(bare.group(1))
+                j += 1
+                break
+            blob_parts.append(nxt.strip())
+            j += 1
+        blob = " ".join(p for p in blob_parts if p)
+        tc = _TRAILING_COUNT_RE.search(blob)
+        if tc:
+            stated = int(tc.group("count")) if stated is None else stated
+            blob = blob[:tc.start()]
+        names = [] if _NONE_RE.match(blob or "") else split_names(blob)
+        if stated is None and not names:
+            stated = 0
+        sections.append(Section(value=value, names=names, stated=stated))
+        i = j
+    return sections
+
+
+def _tally_near(lines: List[str], idx: int, result_text: str) -> Optional[Tuple[int, int, int]]:
+    candidates = [result_text] + lines[idx:idx + 2]
+    for text in candidates:
+        for m in TALLY_RE.finditer(text):
+            before = text[:m.start()]
+            if _TALLY_CONTEXT_RE.search(before) or text is result_text:
+                yes, no = int(m.group("yes")), int(m.group("no"))
+                third = int(m.group("third")) if m.group("third") else 0
+                if yes + no + third <= 60:
+                    return yes, no, third
+    return None
+
+
+def find_evidence(block: str) -> List[Evidence]:
+    """Every result anchor in the block with its attached lists and tally."""
+    lines = block.splitlines()
+    offsets = []
+    pos = 0
+    for line in lines:
+        offsets.append(pos)
+        pos += len(line) + 1
+    found: List[Evidence] = []
+    for idx, line in enumerate(lines):
+        for m in RESULT_RE.finditer(line):
+            result_text = m.group("result")
+            window = " ".join(lines[idx:idx + 2])
+            outcome = None
+            if _FAIL_RE.search(result_text) or (_FAIL_RE.search(window) and not _PASS_RE.search(result_text)):
+                outcome = "FAIL"
+            elif _PASS_RE.search(result_text) or _PASS_RE.search(window):
+                outcome = "PASS"
+            ev = Evidence(
+                result_text=re.sub(r"\s+", " ", line.strip())[:300],
+                outcome=outcome,
+                offset=offsets[idx] + m.start(),
+                unanimous=bool(re.search(r"unanimous", window, re.IGNORECASE)),
+            )
+            ev.sections = _parse_sections(lines, idx + 1, 14)
+            if not ev.sections and idx > 0:
+                # Alameda County prints the lists before "Motion passed 2/0"
+                prior = _parse_sections(lines, max(0, idx - 8), 8)
+                if prior and all(s.value != "PRESENT" for s in prior):
+                    ev.sections = prior
+            ev.tally = _tally_near(lines, idx, line)
+            found.append(ev)
+            break
+    return _dedupe(found)
+
+
+def _dedupe(evidence: List[Evidence]) -> List[Evidence]:
+    """A motion sentence and its 'by the following vote' line are one event."""
+    out: List[Evidence] = []
+    for ev in evidence:
+        if out and ev.offset - out[-1].offset < 160 and not out[-1].sections and not out[-1].tally:
+            out[-1] = ev if (ev.sections or ev.tally or ev.outcome) else out[-1]
+            continue
+        out.append(ev)
+    return out
