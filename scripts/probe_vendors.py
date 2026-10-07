@@ -7,6 +7,7 @@ vendor+slug pairs for cities that get a hit.
 """
 
 import asyncio
+import os
 import sys
 import re
 from typing import Optional
@@ -14,7 +15,7 @@ from typing import Optional
 import aiohttp
 import asyncpg
 
-DB_URL = "postgresql://engagic:engagic_secure_2025@localhost:5432/engagic"
+DB_URL = f"postgresql://engagic:{os.environ['ENGAGIC_POSTGRES_PASSWORD']}@localhost:5432/engagic"
 
 # Probe URLs per vendor -- must return 200 (or redirect) to count as a hit.
 # Each is a function: slug -> URL to probe.

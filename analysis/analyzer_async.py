@@ -351,7 +351,7 @@ class AsyncAnalyzer:
         }
         try:
             for attempt in range(attempts):
-                await get_rate_limiter().wait_if_needed(vendor)
+                await get_rate_limiter().wait_if_needed(vendor, url)
                 try:
                     request_kwargs: Dict[str, Any] = {}
                     if conditional_headers:

@@ -108,6 +108,13 @@ class ArchiveDocumentCheckpoint:
                 "reused": receipt["status"] == "archived"}
 
     def record(self, banana, url, receipt):
+        # Archived originals are found again through the corpus lookup in
+        # archive(); only failures need a durable retry record here.
+        if receipt["status"] == "archived":
+            self.state.execute("DELETE FROM documents WHERE banana=? AND url=?",
+                               (banana, canonical_fetch_url(url)))
+            self.state.commit()
+            return
         self.state.execute("""INSERT INTO documents
             (banana,url,receipt,attempts,next_retry_at,run_id) VALUES(?,?,?,1,?,?)
             ON CONFLICT(banana,url) DO UPDATE SET receipt=excluded.receipt,
@@ -120,7 +127,7 @@ class ArchiveDocumentCheckpoint:
 
 
 def source_jobs(state, sources, start, end, phase, now):
-    """Plan disjoint phases; rotate sources after each monthly window."""
+    """Plan disjoint phases; each job is one source's pending monthly windows."""
     history = defaultdict(list)
     for source, left, right, status, attempts, retry_at in state.execute(
         "SELECT source,start,end,status,attempts,next_retry_at FROM windows"
@@ -154,33 +161,41 @@ async def execute_phase(state, sources, sync, args, semaphore, phase):
     emit(event="phase_started", phase=phase, sources=queue.qsize())
 
     async def worker():
+        # One adapter per source, kept across its consecutive windows: the
+        # adapters' archive caches (Granicus full listing, CivicPlus and
+        # PrimeGov year listings) only pay off when the instance survives
+        # between months. Rebuilding per window refetched each listing ~37
+        # times. Sources still run in parallel across workers.
         while not queue.empty():
             source, city, pending = queue.get_nowait()
-            if args.max_windows and args.processed_windows >= args.max_windows:
-                return
-            args.processed_windows += 1
-            start, end = pending.popleft()
-            identity = (json.dumps(source), start.isoformat(), end.isoformat())
-            state.execute(
-                "INSERT OR IGNORE INTO windows(source,start,end,status) VALUES(?,?,?,'running')", identity)
-            state.execute(
-                "UPDATE windows SET status='running',attempts=attempts+1 WHERE source=? AND start=? AND end=?", identity)
-            state.commit()
-            adapter = get_async_adapter(
-                source[1], source[2],
-                **({"api_token": config.NYC_LEGISTAR_TOKEN} if source[2] == "nyc" else {}))
-            adapter.banana = city.banana
-            try:
-                await archive_source_window(state, identity, adapter, city, sync, args, semaphore)
-            except Exception as exc:
+            adapter = None
+            while pending:
+                if args.max_windows and args.processed_windows >= args.max_windows:
+                    return
+                args.processed_windows += 1
+                start, end = pending.popleft()
+                identity = (json.dumps(source), start.isoformat(), end.isoformat())
                 state.execute(
-                    "UPDATE windows SET status='failed',error=?,next_retry_at=? WHERE source=? AND start=? AND end=?",
-                    (str(exc), time.time() + RETRY_DELAY_SECONDS, *identity))
+                    "INSERT OR IGNORE INTO windows(source,start,end,status) VALUES(?,?,?,'running')", identity)
+                state.execute(
+                    "UPDATE windows SET status='running',attempts=attempts+1 WHERE source=? AND start=? AND end=?", identity)
                 state.commit()
-                emit(event="window_failed", phase=phase, banana=city.banana,
-                     start=start, end=end, error=str(exc))
-            if pending:
-                queue.put_nowait((source, city, pending))
+                try:
+                    # Construction raises on misconfigured sources (granicus without
+                    # a view_id); inside the try it fails one window, not the run.
+                    if adapter is None:
+                        adapter = get_async_adapter(
+                            source[1], source[2],
+                            **({"api_token": config.NYC_LEGISTAR_TOKEN} if source[2] == "nyc" else {}))
+                        adapter.banana = city.banana
+                    await archive_source_window(state, identity, adapter, city, sync, args, semaphore)
+                except Exception as exc:
+                    state.execute(
+                        "UPDATE windows SET status='failed',error=?,next_retry_at=? WHERE source=? AND start=? AND end=?",
+                        (str(exc), time.time() + RETRY_DELAY_SECONDS, *identity))
+                    state.commit()
+                    emit(event="window_failed", phase=phase, banana=city.banana,
+                         start=start, end=end, error=str(exc))
 
     async with asyncio.TaskGroup() as group:
         for _ in range(args.source_concurrency):
@@ -286,8 +301,11 @@ async def archive_source_window(state, identity, adapter, city, sync, args, docu
     bad = sum(not r["success"] for r in receipts.values())
     if discovery_error or bad:
         raise RuntimeError(discovery_error or f"{bad} meetings have unarchived documents; retry this range")
+    # The discovery cache and receipts only serve resuming this window; keeping
+    # them for finished windows grew checkpoints to 7.6 GB and filled the disk,
+    # which took Postgres down (2026-10-04).
     state.execute(
-        "UPDATE windows SET status='complete',error=NULL WHERE source=? AND start=? AND end=?", identity)
+        "UPDATE windows SET status='complete',error=NULL,meetings=NULL,receipts='{}' WHERE source=? AND start=? AND end=?", identity)
     state.commit()
     emit(event="window_complete", banana=city.banana, start=start, end=end,
          seconds=round(time.monotonic() - window_started, 2),

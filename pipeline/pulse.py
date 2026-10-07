@@ -267,7 +267,7 @@ async def _get(
     """GET, or POST when json_body is given (eScribe's calendar is a POST).
     params may be a list of pairs for repeated keys."""
     session = await AsyncSessionManager.get_session(vendor)
-    await get_rate_limiter().wait_if_needed(vendor)
+    await get_rate_limiter().wait_if_needed(vendor, url)
     method = "POST" if json_body is not None else "GET"
     try:
         async with session.request(method, url, params=params, headers=headers, json=json_body,

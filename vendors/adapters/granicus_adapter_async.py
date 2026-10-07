@@ -894,7 +894,12 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
         if result.failure_reason == 'deferred_to_processing':
             return meeting  # Real non-PDF original: preserve without PDF parsing.
         if result.failure_reason in {'timeout', 'engine_error', 'open_failed', 'encrypted', 'download_failed'} or any(a.error for a in result.attempts):
-            raise ValueError(f"Granicus agenda attachment discovery failed: {result.failure_reason}")
+            # Keep the agenda itself and the rest of the window; only the
+            # linked attachments are missing, recorded so the window retries.
+            # Raising here discarded the whole month for one slow chunk.
+            self._archive_discovery_errors.append(
+                f"Granicus agenda attachment discovery failed: {result.failure_reason} ({listing['event_id']})")
+            return meeting
         meeting['items'] = _ensure_attachment_portal_urls(result.items)
         meeting['archive_selection'] = 'agenda_and_linked_attachments'
         return meeting

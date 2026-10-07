@@ -95,7 +95,13 @@ class AsyncCivicClerkAdapter(AsyncBaseAdapter):
                 results.append(meeting)
 
         failures = [m for m in processed_meetings if isinstance(m, Exception)]
-        if failures:
+        if failures and self._originals_only:
+            # Archives keep the events that resolved and record the rest; the
+            # window is retried for the gap. Raising discarded every event in
+            # the month for one agenda fetch (cocoaFL 2025-08, 2026-10-04).
+            self._archive_discovery_errors.extend(
+                f"CivicClerk event failed: {type(f).__name__}: {f}"[:300] for f in failures)
+        elif failures:
             # Let FetchResult and the fetcher's retry loop handle an incomplete pass.
             # Never publish a successful partial snapshot after an API failure.
             raise RuntimeError(

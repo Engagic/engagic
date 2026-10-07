@@ -193,7 +193,7 @@ def test_download_http_status_classification_and_url_redaction(
             return Response()
 
     class Limiter:
-        async def wait_if_needed(self, vendor):
+        async def wait_if_needed(self, vendor, url=None):
             return None
 
     analyzer = AsyncAnalyzer(enable_llm=False)

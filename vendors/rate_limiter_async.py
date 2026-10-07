@@ -4,7 +4,7 @@ import asyncio
 import time
 import random
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from config import get_logger
@@ -64,9 +64,34 @@ SLOTS: Dict[str, int] = {
     "agendaonline": 3,
     "onbase": 12,     # each city is on its own domain, no real cross-city contention
     "destiny": 3,
-    "civicplus": 3,   # each city is on its own domain; slots ~ effective parallel hosts
     # City-direct scrapers stay at 1 (default below)
 }
+
+# Vendors whose cities each live on their own domain. Pacing is per host, so
+# politeness is owed to each city's server rather than shared vendor-wide; a
+# vendor-wide pool of 3 slots capped all 424 CivicPlus cities at ~0.8 req/s
+# combined (2026-10-02). Slots here are per host. Callers without a URL fall
+# back to one vendor-wide pool of this size.
+PER_HOST_SLOTS: Dict[str, int] = {
+    "civicplus": 2,
+}
+
+
+# Cloud object storage serving a vendor's files is not the vendor's servers.
+# Pacing those downloads against the vendor's API budget held CivicClerk, whose
+# files sit on one Azure blob host, to ~20 req/s total (2026-10-04).
+OBJECT_STORAGE_SUFFIXES = (".blob.core.windows.net", ".amazonaws.com", ".cloudfront.net")
+OBJECT_STORAGE_SLOTS = 32
+
+
+def _slot_pool(vendor: str, url: Optional[str]) -> Tuple[str, int]:
+    """Return the slot-table key and slot count for a request."""
+    host = urlparse(url).netloc.lower() if url else ""
+    if host.endswith(OBJECT_STORAGE_SUFFIXES):
+        return f"objectstore@{host}", OBJECT_STORAGE_SLOTS
+    if vendor in PER_HOST_SLOTS:
+        return f"{vendor}@{host or '*'}", PER_HOST_SLOTS[vendor]
+    return vendor, SLOTS.get(vendor, 1)
 
 
 class AsyncRateLimiter:
@@ -85,9 +110,9 @@ class AsyncRateLimiter:
         self._slot_times: Dict[str, List[float]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
-    async def wait_if_needed(self, vendor: str):
+    async def wait_if_needed(self, vendor: str, url: Optional[str] = None):
         min_delay = DELAYS.get(vendor, DELAYS["unknown"])
-        n_slots = SLOTS.get(vendor, 1)
+        pool, n_slots = _slot_pool(vendor, url)
         # Jitter scales with delay: 0-1s of jitter on a 0.3s delay would
         # dominate; cap jitter at half the configured delay so high-throughput
         # API vendors actually pace at their configured rate.
@@ -100,7 +125,7 @@ class AsyncRateLimiter:
         # can serialize their reservations without serializing their waits.
         async with self._lock:
             now = time.time()
-            slots = self._slot_times[vendor]
+            slots = self._slot_times[pool]
             while len(slots) < n_slots:
                 slots.append(0.0)
 
@@ -118,27 +143,28 @@ class AsyncRateLimiter:
             log_fn(
                 "vendor rate limit",
                 vendor=vendor,
+                pool=pool,
                 sleep_seconds=round(sleep_time, 1),
                 slots=n_slots,
             )
             await asyncio.sleep(sleep_time)
 
-    async def respect_retry_after(self, vendor: str, seconds: float):
+    async def respect_retry_after(self, vendor: str, seconds: float, url: Optional[str] = None):
         """Honor a Retry-After header by deferring all of the vendor's slots.
 
         Caps the deferral so a misbehaving server can't park the sync forever.
         """
         seconds = max(0.0, min(seconds, 120.0))
         async with self._lock:
-            n_slots = SLOTS.get(vendor, 1)
-            slots = self._slot_times[vendor]
+            pool, n_slots = _slot_pool(vendor, url)
+            slots = self._slot_times[pool]
             while len(slots) < n_slots:
                 slots.append(0.0)
             target = time.time() + seconds
             for i in range(n_slots):
                 if slots[i] < target:
                     slots[i] = target
-        logger.info("honoring retry-after", vendor=vendor, defer_seconds=round(seconds, 1))
+        logger.info("honoring retry-after", vendor=vendor, pool=pool, defer_seconds=round(seconds, 1))
 
 
 # Process-wide singleton: every adapter and the fetcher share one limiter so

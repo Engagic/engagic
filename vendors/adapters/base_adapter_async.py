@@ -184,7 +184,7 @@ class AsyncBaseAdapter:
         for attempt in range(max_attempts):
             # Per-request politeness gate. Re-enter on every attempt so the
             # rate limiter spaces retries too.
-            await get_rate_limiter().wait_if_needed(self.vendor)
+            await get_rate_limiter().wait_if_needed(self.vendor, url)
 
             start_time = time.time()
             try:
@@ -209,7 +209,7 @@ class AsyncBaseAdapter:
                     if response.status in (429, 503):
                         retry_after = self._parse_retry_after(response.headers.get("Retry-After"))
                         if retry_after is not None:
-                            await get_rate_limiter().respect_retry_after(self.vendor, retry_after)
+                            await get_rate_limiter().respect_retry_after(self.vendor, retry_after, url)
 
                     error_body = await response.text()
                     self.metrics.vendor_requests.labels(vendor=self.vendor, status=f"http_{response.status}").inc()
@@ -329,8 +329,15 @@ class AsyncBaseAdapter:
             return None
 
     async def _get_archive_document(self, url: str) -> aiohttp.ClientResponse:
-        """Archive retries are scheduled durably, rather than nested in transport."""
-        return await self._get(url, _max_attempts=1)
+        """Archive retries are scheduled durably, rather than nested in transport.
+
+        No total deadline: the body streams to disk, and a 30s total cap failed
+        every original slower than 30s to transfer -- the large ones. Only a
+        stalled connect or a read gap counts as a timeout.
+        """
+        timeout = aiohttp.ClientTimeout(
+            total=None, sock_connect=config.VENDOR_HTTP_TIMEOUT, sock_read=120)
+        return await self._get(url, _max_attempts=1, timeout=timeout)
 
     async def _get(self, url: str, **kwargs) -> aiohttp.ClientResponse:
         """GET request. Raises VendorHTTPError on failure."""

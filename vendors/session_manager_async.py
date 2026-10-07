@@ -19,6 +19,7 @@ import aiohttp
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from config import config, get_logger
+from vendors.rate_limiter_async import PER_HOST_SLOTS, SLOTS
 
 logger = get_logger(__name__).bind(component="vendor")
 
@@ -103,9 +104,15 @@ class AsyncSessionManager:
             )
 
             # Connection pooling configuration
+            # Request pacing belongs to the rate limiter; these caps only bound
+            # concurrent transfers, so they derive from the same slot counts.
+            # A flat 20 total starved 30 CivicPlus workers into timeouts that
+            # count the pool wait, and a flat 5 per host held CivicClerk to five
+            # downloads from its one Azure blob host (2026-10-03).
+            vendor_slots = SLOTS.get(vendor, 1)
             connector_kwargs: Dict[str, Any] = {
-                "limit": 20,  # Max 20 total connections per vendor
-                "limit_per_host": 5,  # Max 5 connections per host
+                "limit": 0 if vendor in PER_HOST_SLOTS else max(20, 4 * vendor_slots),
+                "limit_per_host": max(5, vendor_slots),
                 "ttl_dns_cache": 300,  # Cache DNS for 5 minutes
                 "enable_cleanup_closed": True,  # Clean up closed connections
             }

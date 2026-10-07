@@ -130,6 +130,10 @@ class R2Client:
             raise ValueError("file-object put requires payload_sha256 and content_length")
 
         path = self._path(key)
+        # The session's 300s total failed large originals on a shared link.
+        # Budget the deadline by size at a 256 KiB/s floor instead.
+        timeout = aiohttp.ClientTimeout(
+            total=max(300, content_length // (256 * 1024)), connect=30)
         last_error: Optional[str] = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             if not isinstance(data, bytes):
@@ -140,7 +144,8 @@ class R2Client:
             try:
                 session = await self._get_session()
                 async with session.put(
-                    f"https://{self._host}{path}", data=data, headers=headers
+                    f"https://{self._host}{path}", data=data, headers=headers,
+                    timeout=timeout,
                 ) as resp:
                     if resp.status < 300:
                         return

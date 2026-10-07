@@ -53,7 +53,7 @@ curl -X POST http://127.0.0.1:8000/api/auth/signup \
 ### Check User Data
 
 ```bash
-PGPASSWORD='engagic_secure_2025' psql -U engagic -d engagic -h localhost -c "
+PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U engagic -d engagic -h localhost -c "
 SELECT u.email, u.name, a.cities, a.criteria
 FROM userland.users u
 LEFT JOIN userland.alerts a ON u.id = a.user_id;"
@@ -80,10 +80,10 @@ systemctl list-timers | grep engagic
 ### Database Issues
 ```bash
 # Check schema exists
-PGPASSWORD='engagic_secure_2025' psql -U engagic -d engagic -h localhost -c "\dt userland.*"
+PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U engagic -d engagic -h localhost -c "\dt userland.*"
 
 # Check user count
-PGPASSWORD='engagic_secure_2025' psql -U engagic -d engagic -h localhost -c "SELECT COUNT(*) FROM userland.users"
+PGPASSWORD="$ENGAGIC_POSTGRES_PASSWORD" psql -U engagic -d engagic -h localhost -c "SELECT COUNT(*) FROM userland.users"
 ```
 
 ## Rollback (Emergency)

@@ -45,6 +45,11 @@ from vendors.adapters.parsers.quality import classify_title
 
 logger = get_logger(__name__).bind(component="meeting_sync")
 
+# Transient archive failures (Granicus answers 204 under load, dropped
+# connections, R2 hiccups) retry in place. The checkpoint's deferred retry only
+# runs after every source's new windows, which on a multi-day run is too late.
+ARCHIVE_INLINE_RETRY_DELAYS = (15, 60)
+
 
 def _source_audit(meeting_dict: Mapping[str, Any]) -> Dict[str, Any]:
     items = meeting_dict.get("items") or []
@@ -261,31 +266,43 @@ class MeetingSyncOrchestrator:
         # One shared semaphore can bound downloads across all source workers.
         # Striped locks prevent simultaneous acquisition of the same identity
         # across meetings without retaining an ever-growing URL lock cache.
+        # A stripe is held for the whole download+upload, so unrelated URLs
+        # sharing a stripe serialize; 1024 keeps that rare at ~24 transfers.
         semaphore = document_semaphore or asyncio.Semaphore(1)
         if not hasattr(self, "_archive_locks"):
-            self._archive_locks = [asyncio.Lock() for _ in range(64)]
+            self._archive_locks = [asyncio.Lock() for _ in range(1024)]
         urls = {attachment_identity(source["url"]): source["url"]
                 for source in sources if source.get("url")}
 
         async def archive_one(identity, url):
-            async with self._archive_locks[hash(identity) % 64]:
+            async with self._archive_locks[hash(identity) % 1024]:
                 prior = document_checkpoint.get(city.banana, url) if document_checkpoint else None
                 if prior is not None:
                     return identity, prior
-                try:
-                    receipt = await adapter._document_acquirer.archive(
-                        url, banana=city.banana, max_bytes=max_bytes,
-                        document_semaphore=semaphore)
-                    outcome = {"url": url, "status": "archived", **receipt}
-                except ArchiveDocumentUnavailable as exc:
-                    outcome = {"url": url, "status": "unavailable",
-                               "http_status": exc.status_code, "error": str(exc)}
-                except Exception as exc:
-                    logger.warning("original archival failed", banana=city.banana,
-                                   meeting_id=meeting_id, url=url[:160], error=str(exc),
-                                   error_type=type(exc).__name__)
-                    outcome = {"url": url, "status": "failed",
-                               "error": str(exc), "error_type": type(exc).__name__}
+                for delay in (*ARCHIVE_INLINE_RETRY_DELAYS, None):
+                    try:
+                        receipt = await adapter._document_acquirer.archive(
+                            url, banana=city.banana, max_bytes=max_bytes,
+                            document_semaphore=semaphore)
+                        outcome = {"url": url, "status": "archived", **receipt}
+                        break
+                    except ArchiveDocumentUnavailable as exc:
+                        outcome = {"url": url, "status": "unavailable",
+                                   "http_status": exc.status_code, "error": str(exc)}
+                        break
+                    except Exception as exc:
+                        outcome = {"url": url, "status": "failed",
+                                   "error": str(exc), "error_type": type(exc).__name__}
+                        # ValueError is a verdict on the bytes (HTML viewer,
+                        # over allowance, empty body); refetching cannot change it.
+                        if delay is None or isinstance(exc, ValueError):
+                            logger.warning("original archival failed", banana=city.banana,
+                                           meeting_id=meeting_id, url=url[:160], error=str(exc),
+                                           error_type=type(exc).__name__)
+                            break
+                    # Sleeps outside the transfer semaphore (taken inside
+                    # archive()), so a waiting retry holds no download slot.
+                    await asyncio.sleep(delay)
                 if document_checkpoint:
                     document_checkpoint.record(city.banana, url, outcome)
                 return identity, outcome

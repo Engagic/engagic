@@ -252,16 +252,38 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                     )
                     year_soup = BeautifulSoup(await response.text(), 'html.parser')
                 if not year_soup.find(id=f'section{category}') or not year_soup.find(id=f'table{category}'):
-                    raise ValueError(f'Unrecognized CivicPlus history response: category={category}, year={year}')
+                    # A category the city stopped serving answers with the full
+                    # AgendaCenter page instead of its fragment (Lexington MA
+                    # category 12, 2026-10-01). When the live page does not render
+                    # the category either, it is a search-filter checkbox with no
+                    # listing: AgendaCenter search returned zero files for every
+                    # sampled one (4 cities, 2026-10-02; confidence 8/10), so it
+                    # is empty, not missing. A rendered category that answers
+                    # this way is a real gap and stays loud in archives.
+                    if self._originals_only and section is not None:
+                        self._archive_discovery_errors.append(
+                            f'Unrecognized CivicPlus history response: category={category}, year={year}')
+                    else:
+                        logger.warning('civicplus category not served, skipping', slug=self.slug,
+                                       category=category, year=year, rendered=section is not None)
+                    continue
+                # Archives record a bad category-year and keep the city's other
+                # bodies; the window is retried for the gap, nothing found is lost.
+                problem = None
                 for pager in year_soup.select('.pagination, .pager, [class*="Pager"], [class*="paging"]'):
                     if pager.select('a[href], button, select'):
-                        raise ValueError(f'Untraversed CivicPlus history pagination: category={category}, year={year}')
+                        problem = f'Untraversed CivicPlus history pagination: category={category}, year={year}'
                 rows = year_soup.select('tr.catAgendaRow')
                 for row in rows:
                     dated = row.find('a', href=re.compile(r'/ViewFile/(?:Agenda|Minutes)/'))
                     parsed_date = self._extract_date_from_url(dated['href']) if dated else None
                     if parsed_date is None or parsed_date.year != year:
-                        raise ValueError(f'Unconfirmed CivicPlus row year: category={category}, requested={year}')
+                        problem = problem or f'Unconfirmed CivicPlus row year: category={category}, requested={year}'
+                if problem:
+                    if not self._originals_only:
+                        raise ValueError(problem)
+                    self._archive_discovery_errors.append(problem)
+                    continue
                 # The response is a section fragment; wrap it so the same normal
                 # row parser retains body attribution, downloads and minutes.
                 wrapper = year_soup.new_tag('div', attrs={'class': 'listing'})
@@ -272,7 +294,8 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                 year_soup.append(wrapper)
                 parsed = self._extract_meeting_links(year_soup, agenda_url)
                 if self._originals_only and len(parsed) != len(rows):
-                    raise ValueError(f'Incomplete CivicPlus category rows: {len(parsed)}/{len(rows)}, category={category}, year={year}')
+                    self._archive_discovery_errors.append(f'Incomplete CivicPlus category rows: {len(parsed)}/{len(rows)}, category={category}, year={year}')
+                    continue
                 if self._originals_only:
                     self._history_year_cache[key] = parsed
                 logger.info('civicplus historical category listed', slug=self.slug,
@@ -394,7 +417,18 @@ class AsyncCivicPlusAdapter(AsyncBaseAdapter):
                 pending = iter(deduped)
                 async def select_worker():
                     for meeting in pending:
-                        await self._select_archive_documents(meeting)
+                        # One meeting's selection failing (a slow packet, a
+                        # timeout) keeps its plain agenda/packet URLs and is
+                        # recorded as a gap; raising discarded the whole month.
+                        try:
+                            await self._select_archive_documents(meeting)
+                        except Exception as exc:
+                            meeting.setdefault('archive_documents', [
+                                d for d in meeting.get('published_documents', [])
+                                if d['role'] in {'supplemental', 'minutes'}])
+                            self._archive_discovery_errors.append(
+                                f"CivicPlus archive document selection failed: "
+                                f"{type(exc).__name__}: {exc}"[:300])
                 async with asyncio.TaskGroup() as group:
                     for _ in range(min(3, len(deduped))):
                         group.create_task(select_worker())

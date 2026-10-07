@@ -108,7 +108,7 @@ class _Session:
 
 
 class _Limiter:
-    async def wait_if_needed(self, vendor):
+    async def wait_if_needed(self, vendor, url=None):
         return None
 
 
