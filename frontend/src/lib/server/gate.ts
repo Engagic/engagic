@@ -60,6 +60,29 @@ export async function gateVerdict(site: GateSite, request: GateRequest): Promise
 	return (await verifyCookie(request.secret, request.cookie, request.ip)) ? 'pass' : 'challenge';
 }
 
+/**
+ * Gated responses must never enter a shared cache. adapter-cloudflare stores
+ * every GET response whose Cache-Control is not private/no-cache/no-store in
+ * caches.default and serves it BEFORE the app runs, so before this gate: one
+ * page rendered for a cookie holder or an admitted crawler was then served
+ * to anyone in that colo for its max-age (measured on engagic.org,
+ * 2026-10-14). Browsers may still cache it privately for the same max-age.
+ */
+export function keepPrivate(site: GateSite, pathname: string, response: Response): Response {
+	if (isOpenPath(site, pathname)) return response;
+	const maxAge = (response.headers.get('cache-control') || '').match(/max-age=\d+/);
+	const value = maxAge ? `private, ${maxAge[0]}` : 'private, no-store';
+	try {
+		response.headers.set('cache-control', value);
+		return response;
+	} catch {
+		// Immutable headers (a fetched Response): copy it.
+		const copy = new Response(response.body, response);
+		copy.headers.set('cache-control', value);
+		return copy;
+	}
+}
+
 // --- Link previews ---------------------------------------------------------
 
 const previewAgents: string[] = policy.preview_agents;

@@ -1,5 +1,5 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit';
-import { COOKIE_NAME, gateVerdict, isLinkPreview, previewDocument } from '$lib/server/gate';
+import { COOKIE_NAME, gateVerdict, isLinkPreview, keepPrivate, previewDocument } from '$lib/server/gate';
 
 export const handleError: HandleServerError = async ({ error, event }) => {
 	console.error('SSR error:', event.url.pathname, error);
@@ -46,10 +46,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// 'unconfigured' (no CHALLENGE_COOKIE_SECRET) fails open during rollout.
 	}
 
-	return resolve(event, {
+	// A gated page must not land in the adapter's shared cache ($lib/server/gate).
+	return keepPrivate('engagic', event.url.pathname, await resolve(event, {
 		preload: ({ type, path }) => {
 			if (type === 'font') return path.includes('ibm-plex-mono');
 			return type === 'js' || type === 'css';
 		}
-	});
+	}));
 };
