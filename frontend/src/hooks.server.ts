@@ -1,5 +1,5 @@
 import type { Handle, HandleServerError } from '@sveltejs/kit';
-import { COOKIE_NAME, verifyCookie } from '$lib/server/challenge-cookie';
+import { COOKIE_NAME, gateVerdict, isLinkPreview, previewDocument } from '$lib/server/gate';
 
 export const handleError: HandleServerError = async ({ error, event }) => {
 	console.error('SSR error:', event.url.pathname, error);
@@ -8,51 +8,42 @@ export const handleError: HandleServerError = async ({ error, event }) => {
 	};
 };
 
-// Paths that do NOT require the SSR Turnstile gate.
-// Everything else is gated -- content routes are protected by default.
-const UNGATED_PATTERNS: RegExp[] = [
-	/^\/$/,
-	/^\/about(\/|$)/,
-	/^\/login(\/|$)/,
-	/^\/signup(\/|$)/,
-	/^\/auth(\/|$)/,
-	/^\/challenge(\/|$)/,
-	/^\/tiles(\/|$)/,
-	/^\/dashboard(\/|$)/,
-	/^\/funnel(\/|$)/,
-	/^\/sitemap\.xml$/,
-	/^\/robots\.txt$/,
-	/^\/favicon/,
-	/^\/_app\//
-];
-
-function requiresGate(pathname: string): boolean {
-	return !UNGATED_PATTERNS.some((p) => p.test(pathname));
+/* A link-preview fetcher cannot solve the challenge: it gets the rendered
+   page's preview tags and nothing else ($lib/server/gate previewDocument). */
+async function linkPreview(page: Response): Promise<Response> {
+	if (page.status >= 300 && page.status < 400) return page;
+	return new Response(previewDocument(await page.text()), {
+		status: page.status,
+		headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+	});
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.clientIp = event.request.headers.get('cf-connecting-ip');
 	event.locals.ssrAuthSecret = event.platform?.env?.SSR_AUTH_SECRET ?? null;
 
-	// SSR Turnstile gate: require signed cookie before serving content pages.
-	// Only guards GET navigations -- POST/PUT etc. fall through to their handlers.
-	if (event.request.method === 'GET' && requiresGate(event.url.pathname)) {
-		const cookieSecret = event.platform?.env?.CHALLENGE_COOKIE_SECRET;
-		if (cookieSecret) {
-			const cookie = event.cookies.get(COOKIE_NAME);
-			const valid = await verifyCookie(cookieSecret, cookie, event.locals.clientIp);
-			if (!valid) {
-				const returnTo = event.url.pathname + event.url.search;
-				return new Response(null, {
-					status: 303,
-					headers: {
-						Location: `/challenge?return=${encodeURIComponent(returnTo)}`
-					}
-				});
-			}
+	// Content gate (shared policy, $lib/server/gate): open paths and admitted
+	// crawlers pass, everyone else needs the Turnstile cookie. Only guards GET
+	// navigations -- POST/PUT etc. fall through to their handlers.
+	if (event.request.method === 'GET') {
+		const verdict = await gateVerdict('engagic', {
+			pathname: event.url.pathname,
+			ip: event.locals.clientIp,
+			userAgent: event.request.headers.get('user-agent'),
+			cookie: event.cookies.get(COOKIE_NAME),
+			secret: event.platform?.env?.CHALLENGE_COOKIE_SECRET
+		});
+		if (verdict === 'challenge' && isLinkPreview(event.request.headers.get('user-agent'))) {
+			return linkPreview(await resolve(event));
 		}
-		// If CHALLENGE_COOKIE_SECRET is not set, fail open during rollout.
-		// Flip to fail-closed once the env var is confirmed in CF Pages.
+		if (verdict === 'challenge') {
+			const returnTo = event.url.pathname + event.url.search;
+			return new Response(null, {
+				status: 303,
+				headers: { Location: `/challenge?return=${encodeURIComponent(returnTo)}` }
+			});
+		}
+		// 'unconfigured' (no CHALLENGE_COOKIE_SECRET) fails open during rollout.
 	}
 
 	return resolve(event, {

@@ -16,7 +16,7 @@
  */
 
 import type { RequestHandler } from './$types';
-import { COOKIE_NAME, COOKIE_TTL_SECONDS, signCookie } from '$lib/server/challenge-cookie';
+import { COOKIE_NAME, COOKIE_TTL_SECONDS, signCookie } from '$lib/server/gate';
 import { config } from '$lib/api/config';
 
 export const POST: RequestHandler = async ({ request, cookies, platform }) => {
