@@ -25,6 +25,7 @@ from vendors.adapters.custom.berkeley_adapter_async import AsyncBerkeleyAdapter
 from vendors.adapters.custom.chicago_adapter_async import AsyncChicagoAdapter
 from vendors.adapters.custom.menlopark_adapter_async import AsyncMenloParkAdapter
 from vendors.adapters.custom.ross_adapter_async import AsyncRossAdapter
+from vendors.adapters.custom.selfhosted_adapter_async import AsyncSelfHostedAdapter
 from vendors.adapters.visioninternet_adapter_async import AsyncVisionInternetAdapter
 from vendors.adapters.agendaonline_adapter_async import AsyncAgendaOnlineAdapter
 from vendors.adapters.destiny_adapter_async import AsyncDestinyAdapter
@@ -51,6 +52,7 @@ VENDOR_ADAPTERS = {
     "chicago": AsyncChicagoAdapter,
     "menlopark": AsyncMenloParkAdapter,
     "ross": AsyncRossAdapter,
+    "selfhosted": AsyncSelfHostedAdapter,
     "visioninternet": AsyncVisionInternetAdapter,
     "agendaonline": AsyncAgendaOnlineAdapter,
     "destiny": AsyncDestinyAdapter,

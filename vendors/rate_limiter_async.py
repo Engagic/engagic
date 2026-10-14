@@ -39,6 +39,9 @@ DELAYS: Dict[str, float] = {
     "menlopark": 1.8,
     "chicago": 1.8,
     "ross": 1.8,
+    # Agencies' own sites, often behind a state WAF: one 1 req/s burst got the
+    # VPS challenged by waterboards.ca.gov's Imperva (2026-10-13).
+    "selfhosted": 4.0,
     "unknown": 2.7,
 }
 
@@ -74,6 +77,7 @@ SLOTS: Dict[str, int] = {
 # back to one vendor-wide pool of this size.
 PER_HOST_SLOTS: Dict[str, int] = {
     "civicplus": 2,
+    "selfhosted": 1,  # per host; ten water boards share waterboards.ca.gov
 }
 
 

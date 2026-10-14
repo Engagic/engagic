@@ -35,7 +35,7 @@ from database.repositories_async.feedback import FeedbackRepository
 from database.repositories_async.pulse import PulseRepository
 from database.repositories_async.userland import UserlandRepository
 from database.migrate import assert_schema_current
-from corpus.store import close_corpus, init_corpus
+from corpus.store import close_corpus, init_corpus, publish_extract_policy
 from exceptions import DatabaseConnectionError
 
 logger = get_logger(__name__).bind(component="database_postgres")
@@ -163,7 +163,10 @@ class Database:
                     await pool.close()
                     raise
             logger.info("connection pool created", min_size=min_size, max_size=max_size)
-            return cls(pool, initialize_corpus=initialize_corpus)
+            db = cls(pool, initialize_corpus=initialize_corpus)
+            if initialize_corpus:
+                await publish_extract_policy(pool)
+            return db
         except (asyncpg.PostgresError, OSError, ConnectionError) as e:
             logger.error("failed to create connection pool", error=str(e))
             raise DatabaseConnectionError(f"Failed to connect to PostgreSQL: {e}") from e

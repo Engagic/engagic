@@ -4,10 +4,12 @@ Utility to construct vendor source URLs for attribution
 
 import json
 import os
+from datetime import datetime
 from typing import Optional
 
 from config import config
 from config import get_logger
+from vendors.adapters.custom.selfhosted_adapter_async import load_sites
 
 log = get_logger("engagic.vendor_urls")
 
@@ -98,6 +100,15 @@ def _get_onbase_url(slug: str) -> Optional[str]:
     return None
 
 
+def _get_selfhosted_url(slug: str) -> Optional[str]:
+    """The agency's own meeting index, from the selfhosted adapter's registry."""
+    site = load_sites().get(slug)
+    if not site:
+        return None
+    url = site["index"][0].replace("{year}", str(datetime.now().year))
+    return url.split("?", 1)[0] if "{page}" in url else url
+
+
 def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     """
     Construct the source URL for a city's meeting calendar based on vendor and slug.
@@ -126,6 +137,9 @@ def get_vendor_source_url(vendor: str, slug: str) -> Optional[str]:
     # Special handling for OnBase - URLs vary by deployment, load from config
     if vendor == "onbase":
         return _get_onbase_url(slug)
+
+    if vendor == "selfhosted":
+        return _get_selfhosted_url(slug)
 
     vendor_patterns = {
         "legistar": f"https://{slug}.legistar.com/Calendar.aspx",
@@ -199,6 +213,7 @@ def get_vendor_display_name(vendor: str) -> str:
         "chicago": "City of Chicago",
         "menlopark": "City of Menlo Park",
         "ross": "Town of Ross",
+        "selfhosted": "Agency Website",
         "destiny": "Destiny AgendaQuick",
     }
 

@@ -376,7 +376,7 @@ def main():
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--banana", help="Comma-separated jurisdiction IDs")
     selection.add_argument("--all", action="store_true", help="All active sources for the selected vendors")
-    parser.add_argument("--vendors", default="legistar", help="Comma-separated: legistar,civicclerk,primegov,escribe,granicus,civicplus")
+    parser.add_argument("--vendors", default="legistar", help="Comma-separated: legistar,civicclerk,primegov,escribe,granicus,civicplus,selfhosted")
     parser.add_argument("--checkpoint", default="data/archive-meetings.sqlite3")
     parser.add_argument("--max-document-mib", type=int, default=2048)
     parser.add_argument("--source-concurrency", type=int, default=3)
@@ -391,8 +391,8 @@ def main():
     parser.add_argument("--enqueue-summaries", action="store_true",
                         help="Let archived meetings buy LLM summaries; off by default")
     args = parser.parse_args()
-    if set(args.vendors.split(",")) - {"legistar", "civicclerk", "primegov", "escribe", "granicus", "civicplus"}:
-        parser.error("Only legistar, civicclerk, primegov, escribe, granicus and civicplus have verified originals mode")
+    if set(args.vendors.split(",")) - {"legistar", "civicclerk", "primegov", "escribe", "granicus", "civicplus", "selfhosted"}:
+        parser.error("Only legistar, civicclerk, primegov, escribe, granicus, civicplus and selfhosted have verified originals mode")
     if args.start >= args.end or args.max_document_mib <= 0 or args.max_windows < 0 or args.source_concurrency < 1 or args.document_concurrency < 1 or args.meeting_concurrency < 1:
         parser.error("Use increasing dates and positive document allowance")
     asyncio.run(run(args))

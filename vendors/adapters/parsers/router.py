@@ -99,14 +99,21 @@ LADDERS: Dict[str, List[str]] = {
     "packet": ["v2:toc", "text:auto"],
     # legacy force_method="url" semantics: v1 first, v2 auto fallback.
     "url_legacy": ["v1:url", "v2:auto", "text:auto"],
-    # Originals archive: same v1 URL parser, no packet/text fallback or
+    # Originals archive: both URL parsers, no packet/text fallback or
     # full-document extraction pass. Only discover agenda-linked documents.
-    "archive_url": ["v1:url"],
+    # Merged, not cascaded (see _MERGED_LADDERS).
+    "archive_url": ["v1:url", "v2:url"],
     # unforced: v2 auto-detect (toc/url/pageref/url_then_toc), v1 fallback.
     "auto": ["v2:auto", "v1:auto", "text:auto"],
     # legacy force_method="v2_url": single rung, no fallback.
     "v2_url_only": ["v2:url"],
 }
+
+# Ladders whose rungs all run and pool their linked documents. Archival only
+# needs every document an agenda links; neither URL parser finds them all.
+# On 182 selfhosted agendas (2026-10-14) v1 found 140 of 169 linked documents
+# and v2 127, each winning on agendas the other missed; together, 169.
+_MERGED_LADDERS = {"archive_url"}
 
 # Old force_method strings -> ladder names, for the base-adapter shim.
 _FORCE_METHOD_TO_LADDER = {
@@ -540,6 +547,41 @@ def _classify_empty(
     return NO_ITEMS
 
 
+def _attachment_urls(items: List[Dict[str, Any]]) -> List[str]:
+    return [a["url"] for item in items for a in item.get("attachments") or []
+            if isinstance(a, dict) and a.get("url")]
+
+
+def _merge_linked_documents(result: ChunkResult, accepted: List[tuple]) -> ChunkResult:
+    """Keep the items of the rung that linked the most documents, then add
+    every document only another rung found: onto the item with the same
+    agenda number when there is one, else as that rung's own item."""
+    rung, items, metadata, parsed, quality = max(
+        accepted, key=lambda a: len(set(_attachment_urls(a[1]))))
+    seen = set(_attachment_urls(items))
+    by_number = {str(item.get("agenda_number")).strip(): item
+                 for item in items if item.get("agenda_number")}
+    added = 0
+    for _, other_items, *_ in (a for a in accepted if a[0] != rung):
+        for item in other_items:
+            extra = [a for a in item.get("attachments") or []
+                     if isinstance(a, dict) and a.get("url") and a["url"] not in seen]
+            if not extra:
+                continue
+            seen.update(a["url"] for a in extra)
+            added += len(extra)
+            target = by_number.get(str(item.get("agenda_number")).strip()) if item.get("agenda_number") else None
+            if target is not None:
+                target["attachments"] = list(target.get("attachments") or []) + extra
+            else:
+                # Item ids fall back to meeting + sequence: take the next free one.
+                items.append({**item, "attachments": extra, "sequence": len(items) + 1})
+    result.items, result.metadata, result.raw, result.winning_rung = items, metadata, parsed, rung
+    result.quality = {**quality, "merged_documents": added} if added else quality
+    result.failure_reason = None
+    return result
+
+
 def chunk_pdf(
     pdf_path: str,
     ladder: Union[str, Sequence[str]] = "auto",
@@ -599,6 +641,7 @@ def chunk_pdf(
     if used_suggestion:
         result.suggestion_used = result.suggested_rung in rungs
 
+    accepted: List[tuple] = []
     for rung in rungs:
         t0 = time.monotonic()
         try:
@@ -694,10 +737,16 @@ def chunk_pdf(
             }
             if dropped_empty_titles:
                 result.quality["empty_titles_dropped"] = dropped_empty_titles
+            if ladder in _MERGED_LADDERS:
+                accepted.append((rung, items, result.metadata, parsed, result.quality))
+                continue
             if ladder != "archive_url":
                 _attach_ground_truth(result, pdf_path)
                 _apply_ocr_shape_policy(result)
             return result
+
+    if accepted:
+        return _merge_linked_documents(result, accepted)
 
     result.failure_reason = _classify_empty(pdf_path, result.attempts, result.profile)
     # No items is not no text: a flat agenda that defeated every rung still

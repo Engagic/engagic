@@ -20,6 +20,22 @@ Custom adapters are 1:1 with specific high-value cities that don't use standard 
 - City already uses a supported vendor platform
 - Better investment is supporting a new vendor (reaches multiple cities)
 
+## Self-hosted bodies (registry, not classes)
+
+State boards, regional regulators, grid operators, utilities and transit
+agencies that publish meetings on their own sites go through one adapter,
+`selfhosted_adapter_async.py` (vendor `selfhosted`). Each body is an entry in
+`data/selfhosted_sites.json`: index URL(s) (`{year}`/`{page}` templates allowed),
+an optional `meeting_href` regex for per-meeting pages, and a `jurisdiction`
+block. `uv run scripts/onboard_selfhosted.py --apply` creates missing
+jurisdictions from the registry. Verify a new entry by fetching it before
+onboarding; it supports `fetch_meetings(start=, end=, originals_only=True)`, so
+`scripts/archive_meetings.py --vendors selfhosted` backfills it.
+
+Government WAFs (Imperva on waterboards.ca.gov) challenge bursts: pacing is
+one slot per host at 4 s, index pages are cached per adapter, and a challenge
+shell raises instead of parsing as "no meetings".
+
 ## Target Cities
 
 **Implemented:**

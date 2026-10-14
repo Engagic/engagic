@@ -440,6 +440,16 @@ CREATE TABLE IF NOT EXISTS document_blob (
     text_extracted_at TIMESTAMP
 );
 
+-- Readable extractor versions, published by corpus.store for every reader (migration 059).
+CREATE TABLE IF NOT EXISTS corpus_extract_versions (
+    version TEXT PRIMARY KEY,
+    readable BOOLEAN NOT NULL,
+    is_current BOOLEAN NOT NULL DEFAULT FALSE,
+    declared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_corpus_extract_versions_current
+    ON corpus_extract_versions (is_current) WHERE is_current;
+
 -- Where these bytes have been seen: source_identity is the signature-stripped
 -- attachment URL (pipeline.utils.attachment_identity), stable across re-signing.
 CREATE TABLE IF NOT EXISTS document_source (
@@ -936,14 +946,6 @@ CREATE INDEX IF NOT EXISTS idx_meetings_search_vector ON meetings USING gin(sear
 CREATE INDEX IF NOT EXISTS idx_items_search_vector ON items USING gin(search_vector);
 CREATE INDEX IF NOT EXISTS idx_city_matters_search_vector ON city_matters USING gin(search_vector);
 
--- Legacy expression-based FTS indexes (kept for backward compatibility)
-CREATE INDEX IF NOT EXISTS idx_meetings_fts ON meetings
-USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')));
-CREATE INDEX IF NOT EXISTS idx_items_fts ON items
-USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(summary, '')));
-CREATE INDEX IF NOT EXISTS idx_city_matters_fts ON city_matters
-USING gin(to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(canonical_summary, '')));
-
 -- Full-text search on council_members (name)
 CREATE INDEX IF NOT EXISTS idx_council_members_fts ON council_members
 USING gin(to_tsvector('english', name));
@@ -1433,3 +1435,50 @@ DO $$ BEGIN
     END IF;
 END $$;
 ALTER TABLE items SET (autovacuum_analyze_scale_factor = 0.02);
+
+-- Census of Governments units and website scans (migrations 060, 061).
+CREATE TABLE IF NOT EXISTS census_government_units (
+    census_id TEXT PRIMARY KEY,                 -- CENSUS_ID_PID6: present and unique on every row
+    census_gidid TEXT,                          -- CENSUS_ID_GIDID: absent for 36 units new in 2022
+    vintage INTEGER NOT NULL,                   -- Census of Governments year (2022)
+    sheet TEXT NOT NULL,                        -- general | special | school | dependent_school
+    unit_name TEXT NOT NULL,
+    unit_type TEXT,                             -- UNIT_TYPE, FUNCTION_NAME or school level, verbatim
+    state TEXT,                                 -- null on some inactive units
+    city TEXT,
+    county_area TEXT,
+    fips_state TEXT,
+    fips_county TEXT,
+    web_address TEXT,                           -- verbatim, often a bare host
+    web_host TEXT,                              -- lowercased host without www., for ownership checks
+    population INTEGER,
+    is_active BOOLEAN,
+    loaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- The jurisdiction this unit is: matched by name to existing coverage, or onboarded from a scan.
+    banana TEXT REFERENCES jurisdictions (banana) ON UPDATE CASCADE ON DELETE SET NULL,
+    match_method TEXT                           -- name | onboarded
+);
+CREATE INDEX IF NOT EXISTS idx_census_units_state ON census_government_units (state);
+CREATE INDEX IF NOT EXISTS idx_census_units_host ON census_government_units (web_host);
+CREATE INDEX IF NOT EXISTS idx_census_units_banana ON census_government_units (banana);
+
+CREATE TABLE IF NOT EXISTS census_unit_scans (
+    census_id TEXT PRIMARY KEY REFERENCES census_government_units (census_id) ON DELETE CASCADE,
+    -- Homepage probe: one fetch, which agenda vendors and meeting pages it links.
+    probe_version INTEGER NOT NULL,
+    probed_at TIMESTAMP NOT NULL,
+    url TEXT NOT NULL,
+    http_status INTEGER,
+    final_url TEXT,
+    error TEXT,
+    vendors JSONB,                              -- {vendor: slug-or-true}
+    meeting_links JSONB,                        -- candidate meeting/agenda pages
+    -- Discovery: the selfhosted adapter's index parse of those pages.
+    discovery_version INTEGER,
+    tested_at TIMESTAMP,
+    discovery_passed BOOLEAN,
+    discovery_page TEXT,                        -- the page a registry entry is built from
+    discovery_pages JSONB,                      -- per-page metrics and errors
+    registry_slug TEXT                          -- selfhosted_sites.json key once written
+);
+CREATE INDEX IF NOT EXISTS idx_census_unit_scans_passed ON census_unit_scans (discovery_passed) WHERE discovery_passed;

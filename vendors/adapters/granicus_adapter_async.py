@@ -893,7 +893,10 @@ class AsyncGranicusAdapter(AsyncBaseAdapter):
                 meeting['packet_url'], listing['event_id'], ladder='archive_url')
         if result.failure_reason == 'deferred_to_processing':
             return meeting  # Real non-PDF original: preserve without PDF parsing.
-        if result.failure_reason in {'timeout', 'engine_error', 'open_failed', 'encrypted', 'download_failed'} or any(a.error for a in result.attempts):
+        # archive_url runs both URL parsers; one crashing after the other
+        # found the links leaves an error in the trail, not a failed discovery.
+        if result.failure_reason in {'timeout', 'engine_error', 'open_failed', 'encrypted', 'download_failed'} or (
+                not result.items and any(a.error for a in result.attempts)):
             # Keep the agenda itself and the rest of the window; only the
             # linked attachments are missing, recorded so the window retries.
             # Raising here discarded the whole month for one slow chunk.

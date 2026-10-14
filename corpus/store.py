@@ -543,6 +543,41 @@ def get_corpus() -> Optional[CorpusStore]:
     return _store
 
 
+async def publish_extract_policy(pool: Any) -> None:
+    """Sync corpus_extract_versions from EXTRACT_VERSION / COMPATIBLE_EXTRACT_VERSIONS.
+
+    Other repos read corpus text through this table, never through a copy of these
+    constants: a copied list once hid every v3 text from motioncount. Bumping a version
+    here is then the whole change. A passenger like the rest of the corpus: a failure
+    (table not migrated yet, read-only role) is a warning, never a startup error.
+    """
+    readable = sorted(COMPATIBLE_EXTRACT_VERSIONS)
+    try:
+        async with pool.acquire() as conn, conn.transaction():
+            await conn.execute(
+                "UPDATE corpus_extract_versions SET is_current = FALSE, declared_at = now() "
+                "WHERE is_current AND version <> $1",
+                EXTRACT_VERSION,
+            )
+            await conn.execute(
+                "UPDATE corpus_extract_versions SET readable = FALSE, declared_at = now() "
+                "WHERE readable AND NOT (version = ANY($1::text[]))",
+                readable,
+            )
+            await conn.executemany(
+                """
+                INSERT INTO corpus_extract_versions (version, readable, is_current) VALUES ($1, TRUE, $2)
+                ON CONFLICT (version) DO UPDATE
+                SET readable = TRUE, is_current = EXCLUDED.is_current, declared_at = now()
+                WHERE NOT corpus_extract_versions.readable
+                   OR corpus_extract_versions.is_current IS DISTINCT FROM EXCLUDED.is_current
+                """,
+                [(version, version == EXTRACT_VERSION) for version in readable],
+            )
+    except Exception as exc:
+        logger.warning("corpus extract policy not published", error=str(exc), readable=readable)
+
+
 async def close_corpus() -> None:
     global _store
     if _store is not None:

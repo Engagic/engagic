@@ -7,6 +7,7 @@ server/rate_limiter.py
 server/turnstile.py
 server/security_config.py
 server/routes/turnstile.py
+scripts/census_coverage.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
