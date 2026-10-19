@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS docket_filings;
+DROP TABLE IF EXISTS dockets;

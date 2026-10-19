@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS jurisdictions (
     extra_vendors JSONB,  -- Additive [{vendor, slug}] for rare multi-vendor jurisdictions (e.g. Maricopa: BoS on OnBase, commissions on CivicPlus)
     type TEXT NOT NULL DEFAULT 'city',  -- city, county, school_district, utility, transit, water_district, etc.
     county_banana TEXT,  -- FK to parent county jurisdiction (NULL for counties and non-county entities)
+    parent_banana TEXT,  -- The government that owns this body (state, city, court); ownership, not geography (migration 062)
     status TEXT DEFAULT 'active',
     participation JSONB,  -- Jurisdiction-level participation config: {testimony_url, testimony_email, process_url}
     population INTEGER,  -- Population from Census data
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS jurisdictions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (county_banana) REFERENCES jurisdictions(banana) ON DELETE SET NULL,
+    FOREIGN KEY (parent_banana) REFERENCES jurisdictions(banana) ON UPDATE CASCADE ON DELETE SET NULL,
     UNIQUE(name, state)
 );
 
@@ -463,6 +465,8 @@ CREATE TABLE IF NOT EXISTS document_source (
     last_validation_attempt_at TIMESTAMP,
     etag TEXT,
     last_modified TEXT,
+    title TEXT,         -- as a publications listing printed it (migration 062)
+    published_on DATE,  -- as the listing printed it; NULL when it names none
     PRIMARY KEY (content_sha256, source_identity)
 );
 CREATE INDEX IF NOT EXISTS idx_document_source_identity
@@ -816,6 +820,7 @@ ALTER TABLE city_matters ADD COLUMN IF NOT EXISTS search_vector tsvector
 -- Jurisdictions
 CREATE INDEX IF NOT EXISTS idx_jurisdictions_type ON jurisdictions(type);
 CREATE INDEX IF NOT EXISTS idx_jurisdictions_vendor ON jurisdictions(vendor);
+CREATE INDEX IF NOT EXISTS idx_jurisdictions_parent ON jurisdictions (parent_banana) WHERE parent_banana IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_jurisdictions_state ON jurisdictions(state);
 CREATE INDEX IF NOT EXISTS idx_jurisdictions_status ON jurisdictions(status);
 CREATE INDEX IF NOT EXISTS idx_jurisdictions_population ON jurisdictions (population DESC NULLS LAST);
@@ -1482,3 +1487,42 @@ CREATE TABLE IF NOT EXISTS census_unit_scans (
     registry_slug TEXT                          -- selfhosted_sites.json key once written
 );
 CREATE INDEX IF NOT EXISTS idx_census_unit_scans_passed ON census_unit_scans (discovery_passed) WHERE discovery_passed;
+
+-- Dockets: proceedings in a commission's case system (migration 063). A docket
+-- is the container a meeting is for an agenda; a filing is its unit, as an item
+-- is a meeting's, with attachments in the items shape.
+CREATE TABLE IF NOT EXISTS dockets (
+    id TEXT PRIMARY KEY,                -- id_generation.generate_docket_id
+    banana TEXT NOT NULL REFERENCES jurisdictions (banana) ON UPDATE CASCADE ON DELETE CASCADE,
+    system TEXT NOT NULL,               -- data/docket_systems.json key (nydps, txpuc ...)
+    case_key TEXT NOT NULL,             -- the system's own case identifier, as its URLs carry it
+    docket_number TEXT,                 -- the number the commission prints, when the listing shows it
+    title TEXT,                         -- the case caption, when the listing shows it
+    url TEXT NOT NULL,                  -- the case page a person opens
+    first_filed_on DATE,
+    last_filed_on DATE,
+    filing_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (system, case_key)
+);
+CREATE INDEX IF NOT EXISTS idx_dockets_banana ON dockets (banana, last_filed_on DESC);
+
+CREATE TABLE IF NOT EXISTS docket_filings (
+    id TEXT PRIMARY KEY,                -- id_generation.generate_docket_filing_id
+    docket_id TEXT NOT NULL REFERENCES dockets (id) ON DELETE CASCADE,
+    vendor_filing_id TEXT NOT NULL,     -- the system's identity for the filing
+    sequence INTEGER NOT NULL,          -- position in filing order within the docket
+    title TEXT NOT NULL,
+    filing_type TEXT,                   -- as the system labels it (Testimony, Orders, ...)
+    description TEXT,
+    filer TEXT,
+    filed_on DATE,
+    attachments JSONB NOT NULL DEFAULT '[]',
+    attachment_hash TEXT,               -- pipeline.utils.hash_attachments_fast
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (docket_id, vendor_filing_id)
+);
+CREATE INDEX IF NOT EXISTS idx_docket_filings_docket ON docket_filings (docket_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_docket_filings_filed ON docket_filings (filed_on);

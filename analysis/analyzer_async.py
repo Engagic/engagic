@@ -43,6 +43,7 @@ from pipeline.document_acquisition import DocumentResponse, DocumentSourceAcquir
 from pipeline.document_artifacts import (
     DocumentArtifact,
     DocumentFormat,
+    make_artifact,
     text_for_analysis,
     extract_document_links,
     rewrite_s3_virtual_host,
@@ -105,7 +106,7 @@ def _extract_best_pdf_link(html_bytes: bytes, base_url: str) -> Optional[str]:
 
 def _extract_pdf_in_subprocess(
     document_path, ocr_threshold, ocr_dpi, detect_legislative_formatting,
-    max_ocr_workers, *, cancel_event: Optional[threading.Event] = None,
+    max_ocr_workers, ocr_enabled=True, *, cancel_event: Optional[threading.Event] = None,
 ):
     """Inspect and extract behind the guard with one shared wall-clock budget.
 
@@ -127,7 +128,7 @@ def _extract_pdf_in_subprocess(
         try:
             return run_guarded(
                 extract_document_file,
-                (document_path, ocr_threshold, ocr_dpi, formatting, max_ocr_workers),
+                (document_path, ocr_threshold, ocr_dpi, formatting, max_ocr_workers, ocr_enabled),
                 timeout=remaining,
                 rlimit_bytes=int(1.5 * 1024 * 1024 * 1024),
                 cancel_event=cancel_event,
@@ -573,6 +574,45 @@ class AsyncAnalyzer:
                 )
                 return cached
 
+        # Hand the artifact over through a holder so this frame drops its
+        # reference before the guarded child runs (see _extract_artifact).
+        holder = [artifact]
+        del artifact
+        return await self._extract_artifact(holder, safe_url)
+
+    async def extract_archived_async(self, source_url: str, *, ocr_enabled: bool = True) -> Dict[str, Any]:
+        """Extract text for an archived original without contacting its origin.
+
+        Acquisition revalidates stale originals against the government host;
+        a text-only pass over bytes the corpus already holds has no reason to.
+        ocr_enabled=False persists the text layer and records scanned pages as
+        ocr_pending, leaving them to the OCR-owning path.
+        """
+        safe_url = attachment_identity(source_url)
+        corpus_store = get_corpus()
+        if corpus_store is None:
+            raise ExtractionError("corpus unavailable", document_url=safe_url)
+        original = await corpus_store.get_original_artifact_by_identity(source_url)
+        if original is None:
+            raise ExtractionError("no archived original", document_url=safe_url)
+        holder = [make_artifact(
+            requested_url=source_url,
+            source_url=source_url,
+            data=original.data,
+            content_sha256=original.content_sha256,
+            content_type=original.content_type,
+            from_corpus=True,
+            corpus_persisted=True,
+        )]
+        del original
+        return await self._extract_artifact(holder, safe_url, ocr_enabled=ocr_enabled)
+
+    async def _extract_artifact(
+        self, holder: List[DocumentArtifact], safe_url: str, *, ocr_enabled: bool = True
+    ) -> Dict[str, Any]:
+        """Extract and persist one acquired artifact, taking ownership of its bytes."""
+        artifact = holder.pop()
+        corpus_store = get_corpus()
         content_sha256 = artifact.content_sha256
         document_format = artifact.document_format
         source_identity = artifact.source_identity
@@ -613,6 +653,7 @@ class AsyncAnalyzer:
                     self.pdf_extractor.ocr_dpi,
                     self.pdf_extractor.detect_legislative_formatting,
                     self.pdf_extractor.max_ocr_workers,
+                    ocr_enabled,
                 )
             finally:
                 try:

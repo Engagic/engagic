@@ -1307,7 +1307,8 @@ def pdf_page_count(pdf_path: str) -> int:
 
 
 def extract_document_file(pdf_path: str, ocr_threshold: int, ocr_dpi: int,
-                          detect_legislative_formatting: bool, max_ocr_workers: int | None) -> Dict[str, Any]:
+                          detect_legislative_formatting: bool, max_ocr_workers: int | None,
+                          ocr_enabled: bool = True) -> Dict[str, Any]:
     """Guard-child target for process extraction (parsing.subprocess_guard).
 
     Module-level on purpose: forkserver children import the target's module,
@@ -1318,5 +1319,6 @@ def extract_document_file(pdf_path: str, ocr_threshold: int, ocr_dpi: int,
     """
     with open(pdf_path, "rb") as f:
         data = f.read()
-    extractor = PdfExtractor(ocr_threshold, ocr_dpi, detect_legislative_formatting, max_ocr_workers)
+    extractor = PdfExtractor(ocr_threshold, ocr_dpi, detect_legislative_formatting, max_ocr_workers,
+                             ocr_enabled=ocr_enabled)
     return extractor.extract_from_bytes(data)

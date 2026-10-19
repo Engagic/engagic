@@ -24,6 +24,7 @@ from database.repositories_async import (
     MatterRepository,
     QueueRepository,
     BatchJobRepository,
+    DocketRepository,
     DocumentBlobRepository,
     PipelineLifecycleRepository,
     SearchRepository,
@@ -91,6 +92,7 @@ class Database:
         self.queue = QueueRepository(pool)
         self.batch_jobs = BatchJobRepository(pool)
         self.document_blobs = DocumentBlobRepository(pool)
+        self.dockets = DocketRepository(pool)
         self.pipeline_lifecycle = PipelineLifecycleRepository(pool)
         self.search = SearchRepository(pool)
         self.userland = UserlandRepository(pool)

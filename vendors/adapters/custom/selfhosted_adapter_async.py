@@ -416,6 +416,9 @@ class AsyncSelfHostedAdapter(AsyncBaseAdapter):
 
     MINUTES_DISCOVERY_SUPPORTED = True
     ORIGINALS_ARCHIVE_SUPPORTED = True
+    # Meeting pages drop any label naming Spanish; a subclass with a
+    # page-aware translation rule turns this off.
+    DROP_LABELED_TRANSLATIONS = True
 
     def __init__(self, city_slug: str, metrics: Optional[MetricsCollector] = None,
                  site: Optional[Dict[str, Any]] = None):
@@ -604,7 +607,8 @@ class AsyncSelfHostedAdapter(AsyncBaseAdapter):
             # Inline icon markup that the parser surfaced as text.
             text = ""
         text = text or clean(str(anchor.get("title", "")) or str(anchor.get("aria-label", "")))
-        if is_translation(url, text) or (self.exclude and (self.exclude.search(url) or self.exclude.search(text))):
+        if (self.DROP_LABELED_TRANSLATIONS and is_translation(url, text)) or (
+                self.exclude and (self.exclude.search(url) or self.exclude.search(text))):
             return None
         return Link(url=url, text=text, anchor=anchor)
 

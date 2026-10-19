@@ -9,6 +9,7 @@ Everything here is upsert-shaped: two workers acquiring the same bytes
 concurrently must both succeed, converging on one row.
 """
 
+from datetime import date
 from typing import Any, Dict, Optional
 
 from database.repositories_async.base import BaseRepository
@@ -132,6 +133,28 @@ class DocumentBlobRepository(BaseRepository):
             error_type,
             error_message,
         )
+
+    async def record_listing(
+        self, source_identity: str, title: Optional[str], published_on: Optional[date],
+    ) -> int:
+        """What a publications listing currently says about the document at
+        this URL, applied to every revision seen there (the listing names the
+        URL, not a revision). The listing is the authority on its own words,
+        so a retitle replaces the old title; a listing that drops its date
+        does not erase one."""
+        result = await self._execute(
+            """
+            UPDATE document_source
+            SET title = COALESCE($2, title), published_on = COALESCE($3, published_on)
+            WHERE source_identity = $1
+              AND (title IS DISTINCT FROM COALESCE($2, title)
+                   OR published_on IS DISTINCT FROM COALESCE($3, published_on))
+            """,
+            source_identity,
+            title,
+            published_on,
+        )
+        return int(result.rsplit(" ", 1)[-1])
 
     async def record_source_observation(
         self,

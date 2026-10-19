@@ -42,6 +42,9 @@ DELAYS: Dict[str, float] = {
     # Agencies' own sites, often behind a state WAF: one 1 req/s burst got the
     # VPS challenged by waterboards.ca.gov's Imperva (2026-10-13).
     "selfhosted": 4.0,
+    # State commissions' case systems: one host, hundreds of thousands of
+    # documents, so a backfill is long rather than fast.
+    "dockets": 0.7,
     "unknown": 2.7,
 }
 
@@ -78,6 +81,7 @@ SLOTS: Dict[str, int] = {
 PER_HOST_SLOTS: Dict[str, int] = {
     "civicplus": 2,
     "selfhosted": 1,  # per host; ten water boards share waterboards.ca.gov
+    "dockets": 2,  # per host: ~3 req/s to one commission
 }
 
 

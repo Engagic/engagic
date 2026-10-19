@@ -727,3 +727,28 @@ def validate_committee_id(committee_id: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def generate_docket_id(banana: str, system: str, case_key: str) -> str:
+    """Deterministic docket ID: {banana}_dk_{hash}.
+
+    The system's own case identifier is the identity; a docket number the
+    commission prints can be absent or reformatted, the key its URLs carry
+    cannot.
+    """
+    if not banana or not system or not case_key:
+        raise ValueError("banana, system and case_key are required")
+    digest = hashlib.sha256(f"{system}:{case_key.strip()}".encode("utf-8")).hexdigest()[:16]
+    return f"{banana}_dk_{digest}"
+
+
+def generate_docket_filing_id(docket_id: str, vendor_filing_id: str) -> str:
+    """Deterministic filing ID under its docket: {docket_id}_f_{hash}.
+
+    Hashed rather than embedded: filing identities are free text on some
+    systems (a received timestamp plus description).
+    """
+    if not docket_id or not vendor_filing_id or not vendor_filing_id.strip():
+        raise ValueError("docket_id and vendor_filing_id are required")
+    digest = hashlib.sha256(vendor_filing_id.strip().encode("utf-8")).hexdigest()[:12]
+    return f"{docket_id}_f_{digest}"

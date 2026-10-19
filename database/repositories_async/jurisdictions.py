@@ -146,6 +146,17 @@ class JurisdictionRepository(BaseRepository):
 
         logger.info("jurisdiction upserted", banana=city.banana, name=city.name)
 
+    async def set_parent(self, banana: str, parent_banana: str) -> bool:
+        """Record who owns a body, once. A parent already set is never moved
+        here: a changed registry entry is not evidence that ownership changed."""
+        result = await self._execute(
+            "UPDATE jurisdictions SET parent_banana = $2, updated_at = CURRENT_TIMESTAMP "
+            "WHERE banana = $1 AND parent_banana IS NULL",
+            banana,
+            parent_banana,
+        )
+        return result.endswith(" 1")
+
     async def get_city(self, banana: str) -> Optional[Jurisdiction]:
         """Get a jurisdiction by banana
 

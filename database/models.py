@@ -6,7 +6,7 @@ Pydantic dataclasses with runtime validation for core entities.
 
 
 from typing import Optional, List, Dict
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
 from dataclasses import asdict
@@ -510,3 +510,41 @@ class AgendaItem:
             del data["matter"]
 
         return data
+
+
+@dataclass
+class DocketFiling:
+    """One filing in a docket: a dated submission by one party (or the
+    commission), carrying its documents. The docket analogue of AgendaItem;
+    attachments use the same AttachmentInfo shape, so a filing's documents
+    join to the corpus by URL exactly as an item's do."""
+
+    id: str  # id_generation.generate_docket_filing_id
+    docket_id: str
+    vendor_filing_id: str
+    sequence: int  # filing order within the docket, 1-indexed
+    title: str
+    filing_type: Optional[str] = None
+    description: Optional[str] = None
+    filer: Optional[str] = None
+    filed_on: Optional[date] = None
+    attachments: Optional[List[AttachmentInfo]] = None
+    attachment_hash: Optional[str] = None
+
+
+@dataclass
+class Docket:
+    """A proceeding in a commission's case system: the container its filings
+    accumulate in, as a meeting is for its items. Not a meeting: nothing that
+    reads meetings sees it."""
+
+    id: str  # id_generation.generate_docket_id
+    banana: str
+    system: str
+    case_key: str
+    url: str
+    docket_number: Optional[str] = None
+    title: Optional[str] = None
+    first_filed_on: Optional[date] = None
+    last_filed_on: Optional[date] = None
+    filing_count: int = 0
