@@ -92,8 +92,22 @@ assert_migration_workers_quiescent() {
     fi
 }
 
+# The worker gate protects schema changes, not restarts: with nothing pending
+# a manual screen job has nothing to collide with, and gating anyway kept the
+# API down behind an unrelated process run (2026-10-23).
+mark_if_schema_current() {
+    load_env
+    if uv run python -m database.migrate --check; then
+        MIGRATIONS_CHECKED=true
+    fi
+}
+
 quiesce_fetcher_for_migrations() {
     MIGRATION_FETCHER_WAS_ACTIVE=false
+    if [ "$MIGRATIONS_CHECKED" = true ]; then
+        return
+    fi
+    mark_if_schema_current
     if [ "$MIGRATIONS_CHECKED" = true ]; then
         return
     fi
@@ -117,13 +131,17 @@ run_migrations() {
         return
     fi
 
+    mark_if_schema_current
+    if [ "$MIGRATIONS_CHECKED" = true ]; then
+        return
+    fi
+
     # Queue ownership migrations are additive, but every claimant/publisher
     # must drain before schema ownership changes. Dead/completed screen entries
     # are deliberately ignored by list_process_sessions().
     assert_migration_workers_quiescent true
 
     log "Applying pending database migrations..."
-    load_env
     uv run python -m database.migrate
     MIGRATIONS_CHECKED=true
 }
@@ -390,12 +408,13 @@ kill_background_processes() {
     fi
 }
 
-# Combined operations
+# Combined operations. The fetcher is opt-in (start-fetch): sync runs from
+# operator commands and cron, and bundling it here re-enabled a unit that
+# crash-looped ~14k times on a stale ExecStart (2026-10-14..23).
 start_all() {
     quiesce_fetcher_for_migrations
     run_migrations
     start_api_service
-    start_fetcher_service
 }
 
 stop_all() {
@@ -414,9 +433,13 @@ stop_all() {
 
 restart_all() {
     quiesce_fetcher_for_migrations
+    local restore_fetcher="$MIGRATION_FETCHER_WAS_ACTIVE"
+
     run_migrations
     restart_api_service
-    restart_fetcher_service
+    if [ "$restore_fetcher" = true ]; then
+        start_fetcher_service
+    fi
 }
 
 status_all() {

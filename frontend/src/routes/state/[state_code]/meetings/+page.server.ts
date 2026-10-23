@@ -3,7 +3,7 @@ import { createServerApiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 	const stateCode = params.state_code.toUpperCase();
 
 	if (!/^[A-Z]{2}$/.test(stateCode)) {

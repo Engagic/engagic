@@ -103,12 +103,12 @@ async def test_sync_sdk_call_runs_off_event_loop(monkeypatch) -> None:
     # strand pytest in epoll with a default-executor thread after the assertion
     # output. This seam verifies delegation without creating process-lifetime
     # thread state; SDK timeout behavior is an integration concern.
-    async def to_thread(call, *args, **kwargs):
+    async def run_llm_call(call, *args, **kwargs):
         offloaded.append(call)
         await asyncio.sleep(0)
         return call(*args, **kwargs)
 
-    monkeypatch.setattr(asyncio, "to_thread", to_thread)
+    monkeypatch.setattr("analysis.llm.summarizer.run_llm_call", run_llm_call)
 
     assert await summarizer._run_batch_sdk(blocking_call) == "done"
     assert offloaded == [blocking_call]

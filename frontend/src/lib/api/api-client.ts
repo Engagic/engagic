@@ -57,6 +57,7 @@ export function getExtraHeaders(): Record<string, string> {
 export interface RequestContext {
 	clientIp?: string | null;
 	ssrAuthSecret?: string | null;
+	userAgent?: string | null;
 }
 
 export function buildRequestHeaders(context?: RequestContext): Record<string, string> {
@@ -68,6 +69,12 @@ export function buildRequestHeaders(context?: RequestContext): Record<string, st
 		// Forward as CF-Connecting-IP so nginx real_ip module and rate limiting
 		// see the actual client IP, not the Cloudflare Worker edge IP
 		headers['CF-Connecting-IP'] = context.clientIp;
+	}
+	// The visitor's UA, logged by nginx as fua=. Without it every crawler
+	// rendered through SSR reads as engagic-ssr/1.0, so the breaker could not
+	// verify Applebot and killed the API over its /16 (2026-10-21).
+	if (context?.userAgent) {
+		headers['X-Forwarded-User-Agent'] = context.userAgent.slice(0, 512);
 	}
 	// X-SSR-Auth is independent of clientIp: nested under it meant SSR calls
 	// whose locals lacked cf-connecting-ip (e.g. local dev, odd edge cases)
@@ -533,8 +540,12 @@ export const apiClient = {
  * @param ssrAuthSecret - SSR auth secret to authenticate SSR requests (from $env/static/private)
  * @returns API client methods that include the client IP and auth headers
  */
-export function createServerApiClient(clientIp: string | null, ssrAuthSecret?: string | null) {
-	const headers = buildRequestHeaders({ clientIp, ssrAuthSecret });
+export function createServerApiClient(
+	clientIp: string | null,
+	ssrAuthSecret?: string | null,
+	userAgent?: string | null
+) {
+	const headers = buildRequestHeaders({ clientIp, ssrAuthSecret, userAgent });
 
 	// Helper to wrap fetch calls with request-scoped headers
 	async function serverFetch(

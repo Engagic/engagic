@@ -3,7 +3,7 @@ import { createServerApiClient } from '$lib/api/server';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals, setHeaders }) => {
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 
 	try {
 		const data = await apiClient.getCivicInfrastructure();

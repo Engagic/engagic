@@ -18,7 +18,7 @@ function getHighlightedItem(meeting: Meeting, itemParam: string | null): { title
 }
 
 export const load: PageServerLoad = async ({ params, locals, setHeaders, url }) => {
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 	const { city_url, meeting_slug } = params;
 	const itemParam = url.searchParams.get('item');
 

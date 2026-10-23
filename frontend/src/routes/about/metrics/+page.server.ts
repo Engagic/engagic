@@ -2,7 +2,7 @@ import { createServerApiClient } from '$lib/api/server';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ setHeaders, locals }) => {
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 	const [analytics, platformMetrics] = await Promise.all([
 		apiClient.getAnalytics().catch((error) => {
 			console.error('Failed to load analytics:', error);

@@ -7,7 +7,7 @@ export const load: PageServerLoad = async ({ setHeaders, locals }) => {
 		'cache-control': 'public, max-age=300'
 	});
 
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 
 	let analytics: AnalyticsData | null = null;
 	try {

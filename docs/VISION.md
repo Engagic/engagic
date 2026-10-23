@@ -453,7 +453,8 @@ This transforms Engagic from "nice civic tool" to "civic intelligence platform t
 ## Next Frontiers (June 2026)
 
 Four directions identified after the extraction-telemetry arc (CHANGELOG
-2026-06-11). Each builds on infrastructure that already exists; none are
+2026-06-11), plus a fifth on where models replace heuristics (October
+2026). Each builds on infrastructure that already exists; none are
 scheduled — they're the shelf to pull from when the current layer settles.
 
 ### Spatial Layer — proximity-based civic alerts
@@ -497,6 +498,68 @@ ratchet recall pins) is a standing loop that an agent can run. A scheduled
 weekly routine harvesting `processing_metadata` audits would grow the
 chunker/HTML corpora and report ratchets ready to bump — the playbook
 becomes a process instead of a session.
+
+### Model Where Checkable (October 2026)
+
+The original rule was "LLM only when strictly necessary": hard-coded,
+deterministic, auditable. That rule was a proxy for cost, and the
+convenience-to-cost ratio has moved (GLM-flash for open output; decision
+models like TypeSafe's Jev and Cloudflare's open-weight Clef for bounded
+yes/no, multiple-choice and ranking answers). Auditability never required
+determinism. It requires that every output be checkable against the source.
+The rule now: **model where the question is semantic and the answer is
+checkable; code where correctness is arithmetic or identity.**
+
+Three intervention shapes:
+
+1. **Bounded choice.** The model picks from a closed set and cites its
+   evidence; code confirms the evidence exists. Cheapest, shortest input.
+2. **Propose and gate.** The model emits structured rows carrying pointers
+   (exact quote, page, figure); code accepts a row only if the quote is
+   verbatim on that page or the totals reconcile. motioncount already ships
+   this: `extraction/contract_headline.py` (model selects, pointers resolve
+   to hash-pinned text) and `extraction/budget_repair.py` (model proposes
+   rows, the arithmetic gate accepts or rejects).
+3. **Promote the referee.** Where a model already grades deterministic
+   output, run it as the system and keep the heuristics as the cheap first
+   rung and fallback.
+
+Candidates, ranked by downstream payoff. engagic's items and votes feed
+motioncount's ledger, markets and linkage, so upstream fixes improve both
+repos at once.
+
+| # | Area | Today | Intervention | Shape |
+|---|---|---|---|---|
+| 1 | Agenda type (`vendors/adapters/parsers/morphology.py`, `_detect_parse_path` in `agenda_chunker_v2.py`) | Hand-set thresholds on link, TOC and heading counts; effectively a guess on packets | Model picks the morphology from the measured `PdfProfile` plus the first 2-3 pages | 1 |
+| 2 | Item boundaries in packets (v2 TOC and pageref paths) | Mid-item splits, wrong titles. Mean recall 0.48 and precision 0.21 against the 7 model-read files in `tests/chunker/truth/` (Oct 2026) | Model reads the agenda pages and returns number, title, start page and an exact anchor quote per item, never body text; code verifies the quote and slices pages. Packets only; API/HTML listings stay deterministic | 2, 3 |
+| 3 | Vote outcome and vote-to-item alignment (`parsing/rollcall/`) | Regex and alignment heuristics | Outcome as a bounded PASS/FAIL/continued answer with a quote; alignment as a ranking. motioncount `linkage/decisions.py` trusts only explicit outcome records, so this feeds it directly | 1 |
+| 4 | motioncount markets (`extraction/markets.py`) | Explicitly "no model"; ~220 lines of cue patterns over facets; a model already judges precision in `scripts/markets.py verify` | Model assigns market x role membership from the already-paid inventory | 1, 3 |
+| 5 | motioncount entity resolution (`linkage/resolution.py`, `extraction/entity_resolve.py`) | Exact names, curated `VENDOR_ALIASES`, suffix stripping | Code still generates candidate pairs; the model answers "same entity?" with a reason. It also covers acquisitions (Dedrone is Axon), the case the curated list exists for | 1 |
+| 6 | motioncount commercial receipts (`extraction/commercial_receipt.py`, 4.7k lines) | Hand-written pricing-table grammars | Only on tables no grammar recognizes: model proposes rows, the existing reconcile-to-printed-total gate decides | 2 |
+
+Cost notes:
+
+- Rows 1-3 read front matter only: about 5-10k input tokens per meeting,
+  once per meeting. Measure daily meeting volume before calling it cheap.
+- Row 4 gives up a real property: membership is re-derived for free
+  whenever `markets.py` changes. With a model, every retune is a paid
+  re-run. The inputs are short, but the cost is no longer zero.
+
+Stays deterministic:
+
+- Budget hierarchy (`budget_tree.py`, `budget_layout.py`). Children summing
+  to the parent is the proof, and `budget_repair` already covers what the
+  parser misses.
+- Candidate generation in `linkage/similarity.py` (MinHash, Jaccard). A
+  model can at most judge the pairs it finds.
+- Identity: bananas, matter ids, content hashes.
+- Clean structured sources: vendor APIs and HTML listing parsers.
+
+Cheapest path to evidence for rows 1-2: grow `tests/chunker/truth/` from 7
+files to ~50 with `grow_truth.py` (still Gemini-bound; port it to the GLM
+backend first), then score three arms against it: heuristics only, model
+morphology only, and model boundaries with the quote gate. Ship the winner
+with the heuristics kept as fallback.
 
 **B2B note:** the `tenants` / `tenant_coverage` / `tenant_keywords` tables
 mean the Phase 5/6 commercial layer is half-built in the schema already.

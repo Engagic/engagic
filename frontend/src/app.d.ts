@@ -6,6 +6,7 @@ declare global {
 		interface Locals {
 			clientIp: string | null;
 			ssrAuthSecret: string | null;
+			userAgent: string | null;
 		}
 		// interface PageData {}
 		// interface PageState {}

@@ -10,6 +10,7 @@ Responsibilities:
 """
 
 import asyncio
+import functools
 import hashlib
 import json
 import os
@@ -17,6 +18,7 @@ import random
 import re
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from importlib.resources import files
 from json import JSONDecodeError
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
@@ -46,7 +48,21 @@ from analysis.llm.backends import (
     strip_code_fence,
 )
 from pipeline.protocols import MetricsCollector, NullMetrics
-from exceptions import LLMError
+from exceptions import LLMAccountError, LLMError
+
+# Provider calls are blocking HTTP with sleeping retries. On asyncio's default
+# executor (min(32, cpus + 4) = 7 threads here) they starved getaddrinfo and
+# file I/O, so asyncpg could not resolve "localhost" and the run died in
+# finish_run with a pool TimeoutError (2026-10-23). They get their own pool.
+_LLM_EXECUTOR = ThreadPoolExecutor(
+    max_workers=max(1, config.LLM_CONCURRENCY), thread_name_prefix="llm"
+)
+
+
+async def run_llm_call(call: Callable[..., Any], /, *args, **kwargs) -> Any:
+    """Run one blocking provider call off-loop without touching the default executor."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_LLM_EXECUTOR, functools.partial(call, *args, **kwargs))
 
 logger = get_logger(__name__).bind(component="analyzer")
 
@@ -159,7 +175,7 @@ class Summarizer:
     async def _run_batch_sdk(self, call: Callable[..., Any], /, *args, **kwargs):
         """Run one synchronous Batch/Files/Caches SDK call off-loop."""
         async with self._batch_sdk_semaphore:
-            return await asyncio.to_thread(call, *args, **kwargs)
+            return await run_llm_call(call, *args, **kwargs)
 
     @staticmethod
     def _provider_error_metadata(error_data: Any) -> Dict[str, Any]:
@@ -580,6 +596,8 @@ class Summarizer:
             )
             return completion.text
 
+        except LLMAccountError:
+            raise
         except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
             self._record_call(
@@ -666,6 +684,8 @@ class Summarizer:
             )
             return self._parse_item_response(completion.text)
 
+        except LLMAccountError:
+            raise
         except Exception as e:  # Intentionally broad: API boundary, convert to LLMError
             duration = time.time() - start_time
             self._record_call(

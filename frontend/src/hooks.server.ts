@@ -21,6 +21,7 @@ async function linkPreview(page: Response): Promise<Response> {
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.clientIp = event.request.headers.get('cf-connecting-ip');
 	event.locals.ssrAuthSecret = event.platform?.env?.SSR_AUTH_SECRET ?? null;
+	event.locals.userAgent = event.request.headers.get('user-agent');
 
 	// Content gate (shared policy, $lib/server/gate): open paths and admitted
 	// crawlers pass, everyone else needs the Turnstile cookie. Only guards GET

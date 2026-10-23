@@ -30,7 +30,7 @@ from pipeline.utils import (
     meeting_work_version,
 )
 from pipeline.url_refresh import refresh_attachment_urls
-from exceptions import ProcessingError, ExtractionError, LLMError
+from exceptions import ProcessingError, ExtractionError, LLMAccountError, LLMError
 from analysis.analyzer_async import AsyncAnalyzer
 from analysis.llm.summarizer import GeminiSummarizer
 from analysis.llm.input_budget import (
@@ -1534,6 +1534,9 @@ class Processor:
                 for job in jobs
             )
         )
+        account_errors = [o.error for o in outcomes if o.error_type == LLMAccountError.__name__]
+        if account_errors:
+            raise LLMAccountError(f"stopping run: {account_errors[0]}")
         for job, outcome in zip(jobs, outcomes):
             target = by_banana.setdefault(job.banana, Counter())
             if outcome.is_success:
@@ -1981,6 +1984,8 @@ class Processor:
                         return {"success": True, "summary": result["summary"], "topics": normalized_topics}
                     else:
                         raise ProcessingError(f"Item processing failed: {result.get('error', 'Unknown error')}", context={"item_id": item.id})
+        except LLMAccountError:
+            raise
         except LLMError as e:
             raise ProcessingError(f"Item processing failed: {e}", context={"item_id": item.id}) from e
 
@@ -2365,6 +2370,8 @@ class Processor:
 
         try:
             result = await self._process_single_item(representative_item, banana=banana)
+        except LLMAccountError:
+            raise
         except ProcessingError as e:
             logger.error("matter processing failed", matter_id=matter_id, error=str(e))
             self.metrics.record_error("processor", e)
@@ -3110,6 +3117,8 @@ class Processor:
             )
             return empty_stats
 
+        except LLMAccountError:
+            raise
         except (ProcessingError, LLMError, ExtractionError) as e:
             logger.error("error processing summary", packet_url=meeting.packet_url, error=str(e))
             if use_batch:

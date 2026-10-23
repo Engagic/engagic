@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Mapping
 
-from exceptions import ExtractionError, LLMError, ProcessingError
+from exceptions import ExtractionError, LLMAccountError, LLMError, ProcessingError
 from pipeline.models import QueueJob
 from pipeline.outcomes import JobOutcome, OutcomeStatus
 
@@ -142,6 +142,18 @@ class JobRunner:
                 outcome = JobOutcome.abandoned(exc)
             except TerminalJobError as exc:
                 outcome = JobOutcome.terminal_failure(exc)
+            except LLMAccountError as exc:
+                # The work is fine and the account is not: release the claim
+                # with its retry budget intact and let the runtime stop.
+                await self.db.queue.release_processing_claim(
+                    job.id,
+                    job.claim_token,
+                    job.work_version,
+                    error_message=f"provider account unavailable: {exc}"[:500],
+                )
+                claim_settled = True
+                outcome = JobOutcome.abandoned(exc)
+                return outcome
             except (ProcessingError, LLMError, ExtractionError) as exc:
                 outcome = JobOutcome.retryable_failure(exc)
             except Exception as exc:

@@ -27,7 +27,7 @@ from google import genai
 from google.genai import types
 
 from config import config, get_logger
-from exceptions import LLMError
+from exceptions import LLMAccountError, LLMError
 
 logger = get_logger(__name__).bind(component="llm_backend")
 
@@ -60,6 +60,17 @@ MODEL_PRICING_PER_MILLION: Dict[str, tuple[float, float, float]] = {
 }
 
 _RETRYABLE_HTTP = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+# Providers report an empty account through the rate-limit status (Z.AI: 429
+# with code 1113), so the body decides, not the status.
+_ACCOUNT_STATUS = frozenset({401, 402, 403, 429})
+_ACCOUNT_MARKERS = ('"1113"', "insufficient balance", "no resource package", "insufficient credits", "invalid api key")
+
+
+def _account_exhausted(status: int, body: str) -> bool:
+    if status in (401, 402):
+        return True
+    low = body.lower()
+    return status in _ACCOUNT_STATUS and any(marker in low for marker in _ACCOUNT_MARKERS)
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.S)
 
 
@@ -324,6 +335,12 @@ class OpenAICompatibleBackend:
         for attempt in range(self.max_retries):
             try:
                 response = self._post(body)
+                if _account_exhausted(response.status_code, response.text[:2000]):
+                    raise LLMAccountError(
+                        f"{self.name} account unavailable: HTTP {response.status_code}: {response.text[:300]}",
+                        model=self.model,
+                        prompt_type="unknown",
+                    )
                 if response.status_code in _RETRYABLE_HTTP:
                     raise _TransientError(
                         f"HTTP {response.status_code}: {response.text[:300]}",
@@ -340,6 +357,12 @@ class OpenAICompatibleBackend:
                     error = data["error"]
                     code = error.get("code") if isinstance(error, dict) else None
                     message = json.dumps(error)[:600]
+                    if _account_exhausted(429, message):
+                        raise LLMAccountError(
+                            f"{self.name} account unavailable: {message}",
+                            model=self.model,
+                            prompt_type="unknown",
+                        )
                     if code in _RETRYABLE_HTTP:
                         raise _TransientError(f"provider error: {message}", rate_limited=code == 429)
                     raise LLMError(

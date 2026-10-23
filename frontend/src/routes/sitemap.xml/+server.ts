@@ -40,7 +40,7 @@ function matterLastmod(matter: StateMatterSummary): string | undefined {
 }
 
 export const GET: RequestHandler = async ({ setHeaders, locals }) => {
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 	const today = new Date().toISOString().split('T')[0];
 
 	// Fetch all cities from the coverage API

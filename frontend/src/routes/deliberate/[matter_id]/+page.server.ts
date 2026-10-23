@@ -14,7 +14,7 @@ interface DeliberationData {
 }
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret);
+	const apiClient = createServerApiClient(locals.clientIp, locals.ssrAuthSecret, locals.userAgent);
 	const matterId = params.matter_id;
 
 	try {

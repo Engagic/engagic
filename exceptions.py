@@ -333,6 +333,15 @@ class LLMError(ProcessingError):
         super().__init__(message, context)
 
 
+class LLMAccountError(LLMError):
+    """The provider account cannot serve any request: empty balance, hard
+    quota, revoked key. Nothing about the unit is wrong, so it must not be
+    retried, charged an attempt, or recorded as a failed summary; the run
+    stops and the claimed work goes back to the queue untouched. Z.AI's empty
+    balance (HTTP 429, code 1113) was retried for 91s per item and burned an
+    attempt on every matter it touched (2026-10-23)."""
+
+
 class QueueError(ProcessingError):
     """Queue processing failures
 

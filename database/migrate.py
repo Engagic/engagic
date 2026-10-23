@@ -19,6 +19,7 @@ Confidence: 8/10 - Standard pattern, asyncpg-native
 """
 
 import argparse
+import sys
 import asyncio
 from pathlib import Path
 from typing import Any, Protocol
@@ -259,6 +260,19 @@ async def status() -> None:
         await conn.close()
 
 
+async def has_pending() -> bool:
+    """True when any migration is unapplied (or the ledger is missing)."""
+    conn = await get_connection()
+    try:
+        try:
+            applied = await get_applied_migrations(conn)
+        except asyncpg.UndefinedTableError:
+            return True
+        return bool(get_pending_migrations(applied))
+    finally:
+        await conn.close()
+
+
 async def rollback(count: int = 1) -> int:
     """
     Rollback the last N migrations.
@@ -303,6 +317,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--status", action="store_true", help="show applied and pending migrations"
     )
     action.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if migrations are pending, 0 if the schema is current",
+    )
+    action.add_argument(
         "--rollback",
         nargs="?",
         const=1,
@@ -319,6 +338,8 @@ def main():
 
     if args.status:
         asyncio.run(status())
+    elif args.check:
+        sys.exit(1 if asyncio.run(has_pending()) else 0)
     elif args.rollback is not None:
         rolled_back = asyncio.run(rollback(args.rollback))
         print(f"Rolled back {rolled_back} migration(s)")

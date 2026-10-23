@@ -26,14 +26,14 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import aiohttp
 
 from corpus.store import get_corpus
-from exceptions import DocumentDownloadError, ExtractionError, LLMError
+from exceptions import DocumentDownloadError, ExtractionError, LLMAccountError, LLMError
 from parsing.memory_budget import ReservedBytes, reserve_memory_async
 from parsing.pdf import PdfExtractor, extract_document_file, pdf_page_count
 from parsing.subprocess_guard import (
     GuardCrashed, GuardTaskError, GuardTimeout, run_guarded, run_guarded_thread,
 )
 from parsing.participation import parse_participation_info
-from analysis.llm.summarizer import GeminiSummarizer
+from analysis.llm.summarizer import GeminiSummarizer, run_llm_call
 from analysis.llm.input_budget import (
     limit_item_title,
     limit_shared_context,
@@ -735,6 +735,8 @@ class AsyncAnalyzer:
                 "meeting_id": meeting_id,
             }
 
+        except LLMAccountError:
+            raise
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(
@@ -811,7 +813,7 @@ class AsyncAnalyzer:
                 # 5 min timeout - summarizer has internal 3 min retry budget
                 try:
                     summary = await asyncio.wait_for(
-                        asyncio.to_thread(
+                        run_llm_call(
                             summarizer.summarize_meeting,
                             model_text,
                         ),
@@ -828,6 +830,8 @@ class AsyncAnalyzer:
             else:
                 logger.warning("no text extracted or poor quality", url=url)
 
+        except LLMAccountError:
+            raise
         except (ExtractionError, LLMError, OSError, IOError) as e:
             logger.warning("processing failed", url=url, error=str(e), error_type=type(e).__name__)
 
@@ -917,7 +921,7 @@ class AsyncAnalyzer:
                 # so a real stall cancels the socket and frees the thread
                 # instead of leaking it past the async-layer cancellation.
                 summary, topics = await asyncio.wait_for(
-                    asyncio.to_thread(
+                    run_llm_call(
                         summarizer.summarize_item,
                         title,
                         text,
@@ -945,6 +949,8 @@ class AsyncAnalyzer:
                     "error": "LLM summarization timed out after 5 minutes",
                 }
 
+            except LLMAccountError:
+                raise
             except Exception as e:
                 logger.error(
                     "item processing failed",
@@ -974,6 +980,8 @@ class AsyncAnalyzer:
             for finished in asyncio.as_completed(tasks):
                 try:
                     result = await finished
+                except LLMAccountError:
+                    raise
                 except Exception as e:
                     # process_item already swallows expected exceptions; this
                     # only catches truly unexpected ones (e.g., CancelledError

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from exceptions import LLMAccountError
 from pipeline.job_runner import JobExecutionPolicy, JobRunner, TerminalJobError
 from pipeline.models import MeetingJob, QueueJob
 from pipeline.outcomes import JobOutcome, OutcomeStatus
@@ -162,6 +163,21 @@ async def test_terminal_descriptor_failure_does_not_retry():
 
     assert outcome.status is OutcomeStatus.TERMINAL_FAILURE
     assert db.queue.transitions[0][3] is False
+
+
+@pytest.mark.asyncio
+async def test_account_error_releases_claim_without_charging_retry():
+    db = database()
+
+    async def handler(_job):
+        raise LLMAccountError("zai account unavailable: HTTP 429 code 1113")
+
+    outcome = await JobRunner(db, handler).run(job(), policy=POLICY)
+
+    assert outcome.status is OutcomeStatus.ABANDONED
+    assert outcome.error_type == "LLMAccountError"
+    assert [t[0] for t in db.queue.transitions] == ["release"]
+    assert "1113" in db.queue.transitions[0][4]
 
 
 @pytest.mark.asyncio
